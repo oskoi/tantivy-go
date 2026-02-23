@@ -85,7 +85,7 @@ impl<'de> Deserialize<'de> for QueryModifier {
     }
 }
 
-fn extract_query_data <'a, D : Deserializer<'a>>(
+fn extract_query_data<'a, D: Deserializer<'a>>(
     map: &serde_json::Value,
 ) -> Result<&serde_json::Map<String, serde_json::Value>, D::Error> {
     map.get("query")
@@ -152,8 +152,12 @@ impl<'de> Deserialize<'de> for QueryElement {
                     boost,
                 })
             }
-            QueryType::PhraseQuery | QueryType::PhrasePrefixQuery | QueryType::TermPrefixQuery
-            | QueryType::TermQuery | QueryType::EveryTermQuery | QueryType::OneOfTermQuery => {
+            QueryType::PhraseQuery
+            | QueryType::PhrasePrefixQuery
+            | QueryType::TermPrefixQuery
+            | QueryType::TermQuery
+            | QueryType::EveryTermQuery
+            | QueryType::OneOfTermQuery => {
                 let query_data = extract_query_data::<D>(&map)?;
                 let (field_index, text_index, boost) = extract_query_indices_and_boost(query_data);
 

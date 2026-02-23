@@ -14,7 +14,9 @@ pub fn extract_text_from_owned_value<'a>(
     if let ReferenceValueLeaf::Str(text) = value {
         Ok(Cow::Borrowed(text))
     } else {
-        Err(TantivyGoError("Only OwnedValue::Str is supported".to_string()))
+        Err(TantivyGoError(
+            "Only OwnedValue::Str is supported".to_string(),
+        ))
     }
 }
 

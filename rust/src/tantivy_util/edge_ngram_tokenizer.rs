@@ -1,5 +1,5 @@
-use tantivy::tokenizer::*;
 use tantivy::tokenizer::Token;
+use tantivy::tokenizer::*;
 use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Clone)]
@@ -10,10 +10,7 @@ pub struct EdgeNgramTokenizer {
 }
 
 impl EdgeNgramTokenizer {
-    pub fn new(min_gram: usize,
-               max_gram: usize,
-               limit: usize,
-    ) -> EdgeNgramTokenizer {
+    pub fn new(min_gram: usize, max_gram: usize, limit: usize) -> EdgeNgramTokenizer {
         EdgeNgramTokenizer {
             min_gram,
             max_gram,
@@ -28,7 +25,9 @@ impl Tokenizer for EdgeNgramTokenizer {
     fn token_stream<'a>(&'a mut self, text: &'a str) -> BoxTokenStream<'a> {
         let mut copied_graphemes = String::new();
         for (pos, grapheme) in text.grapheme_indices(true) {
-            if pos == self.limit { break; }
+            if pos == self.limit {
+                break;
+            }
             copied_graphemes.push_str(grapheme);
         }
         let text = copied_graphemes;
@@ -36,7 +35,9 @@ impl Tokenizer for EdgeNgramTokenizer {
         let words = text.unicode_words().collect::<Vec<&str>>();
         let mut graphemes_count = 0;
         for (position, word) in words.iter().enumerate() {
-            if graphemes_count == self.limit { break; }
+            if graphemes_count == self.limit {
+                break;
+            }
             let graphemes = word.graphemes(true);
             let word_len = graphemes.count();
             if word_len < self.min_gram {
@@ -58,7 +59,10 @@ impl Tokenizer for EdgeNgramTokenizer {
                 });
             }
         }
-        BoxTokenStream::new(VecTokenStream { tokens, next_index: 0 })
+        BoxTokenStream::new(VecTokenStream {
+            tokens,
+            next_index: 0,
+        })
     }
 }
 
@@ -89,8 +93,8 @@ impl TokenStream for VecTokenStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tantivy::tokenizer::Tokenizer;
     use tantivy::tokenizer::Token;
+    use tantivy::tokenizer::Tokenizer;
 
     #[test]
     fn test_edge_ngram_tokenizer_thai() {
@@ -98,11 +102,41 @@ mod tests {
         let mut token_stream = tokenizer.token_stream("ตัวอย่ง");
 
         let expected_tokens = vec![
-            Token { offset_from: 0, offset_to: 6, position: 0, text: "ตั".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 3, position: 1, text: "ว".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 3, position: 2, text: "อ".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 6, position: 3, text: "ย่".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 3, position: 4, text: "ง".to_string(), position_length: 1 },
+            Token {
+                offset_from: 0,
+                offset_to: 6,
+                position: 0,
+                text: "ตั".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 3,
+                position: 1,
+                text: "ว".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 3,
+                position: 2,
+                text: "อ".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 6,
+                position: 3,
+                text: "ย่".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 3,
+                position: 4,
+                text: "ง".to_string(),
+                position_length: 1,
+            },
         ];
 
         for expected_token in expected_tokens {
@@ -120,15 +154,69 @@ mod tests {
         let mut token_stream = tokenizer.token_stream("hello my friend");
 
         let expected_tokens = vec![
-            Token { offset_from: 0, offset_to: 2, position: 0, text: "he".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 3, position: 0, text: "hel".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 4, position: 0, text: "hell".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 5, position: 0, text: "hello".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 2, position: 1, text: "my".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 2, position: 2, text: "fr".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 3, position: 2, text: "fri".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 4, position: 2, text: "frie".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 5, position: 2, text: "frien".to_string(), position_length: 1 },
+            Token {
+                offset_from: 0,
+                offset_to: 2,
+                position: 0,
+                text: "he".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 3,
+                position: 0,
+                text: "hel".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 4,
+                position: 0,
+                text: "hell".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 5,
+                position: 0,
+                text: "hello".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 2,
+                position: 1,
+                text: "my".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 2,
+                position: 2,
+                text: "fr".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 3,
+                position: 2,
+                text: "fri".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 4,
+                position: 2,
+                text: "frie".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 5,
+                position: 2,
+                text: "frien".to_string(),
+                position_length: 1,
+            },
         ];
 
         for expected_token in expected_tokens {
@@ -146,11 +234,41 @@ mod tests {
         let mut token_stream = tokenizer.token_stream("hello my friend");
 
         let expected_tokens = vec![
-            Token { offset_from: 0, offset_to: 2, position: 0, text: "he".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 3, position: 0, text: "hel".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 4, position: 0, text: "hell".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 5, position: 0, text: "hello".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 2, position: 1, text: "my".to_string(), position_length: 1 },
+            Token {
+                offset_from: 0,
+                offset_to: 2,
+                position: 0,
+                text: "he".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 3,
+                position: 0,
+                text: "hel".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 4,
+                position: 0,
+                text: "hell".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 5,
+                position: 0,
+                text: "hello".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 2,
+                position: 1,
+                text: "my".to_string(),
+                position_length: 1,
+            },
         ];
 
         for expected_token in expected_tokens {
@@ -168,8 +286,20 @@ mod tests {
         let mut token_stream = tokenizer.token_stream("hi my");
 
         let expected_tokens = vec![
-            Token { offset_from: 0, offset_to: 2, position: 0, text: "hi".to_string(), position_length: 1 },
-            Token { offset_from: 0, offset_to: 2, position: 1, text: "my".to_string(), position_length: 1 },
+            Token {
+                offset_from: 0,
+                offset_to: 2,
+                position: 0,
+                text: "hi".to_string(),
+                position_length: 1,
+            },
+            Token {
+                offset_from: 0,
+                offset_to: 2,
+                position: 1,
+                text: "my".to_string(),
+                position_length: 1,
+            },
         ];
 
         for expected_token in expected_tokens {

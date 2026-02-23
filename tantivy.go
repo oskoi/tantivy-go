@@ -13,7 +13,6 @@ import (
 #cgo nocallback context_register_text_analyzer_ngram
 #cgo nocallback context_register_text_analyzer_edge_ngram
 #cgo nocallback context_register_text_analyzer_simple
-#cgo nocallback context_register_jieba_tokenizer
 #cgo nocallback context_register_text_analyzer_raw
 #cgo nocallback context_add_and_consume_documents
 #cgo nocallback context_delete_documents
@@ -35,7 +34,6 @@ import (
 #cgo noescape context_register_text_analyzer_ngram
 #cgo noescape context_register_text_analyzer_edge_ngram
 #cgo noescape context_register_text_analyzer_simple
-#cgo noescape context_register_jieba_tokenizer
 #cgo noescape context_register_text_analyzer_raw
 #cgo noescape context_add_and_consume_documents
 #cgo noescape context_delete_documents
@@ -56,7 +54,6 @@ import (
 
 const TokenizerSimple = "simple_tokenizer"
 const TokenizerNgram = "ngram"
-const TokenizerJieba = "jieba"
 const TokenizerEdgeNgram = "edge_ngram"
 const TokenizerRaw = "raw"
 

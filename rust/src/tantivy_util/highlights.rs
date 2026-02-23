@@ -1,8 +1,8 @@
 use crate::tantivy_util::{Fragment, Highlight};
 use tantivy::query::Query;
 use tantivy::schema::Schema;
-use tantivy::{Searcher, TantivyDocument, TantivyError};
 use tantivy::snippet::SnippetGenerator;
+use tantivy::{Searcher, TantivyDocument, TantivyError};
 
 pub fn find_highlights(
     with_highlights: bool,
@@ -14,15 +14,20 @@ pub fn find_highlights(
     let mut highlights: Vec<Highlight> = vec![];
     if with_highlights {
         for (field_value, _) in doc.field_values() {
-            let snippet_generator = SnippetGenerator::create(
-                &searcher, query, field_value)?;
+            let snippet_generator = SnippetGenerator::create(&searcher, query, field_value)?;
             let snippet = snippet_generator.snippet_from_doc(doc);
-            let highlighted: Vec<(usize, usize)> = snippet.highlighted()
+            let highlighted: Vec<(usize, usize)> = snippet
+                .highlighted()
                 .to_owned()
                 .iter()
                 .filter_map(|highlight| {
-                    if highlight.is_empty() { None } else { Some((highlight.start, highlight.end)) }
-                }).collect();
+                    if highlight.is_empty() {
+                        None
+                    } else {
+                        Some((highlight.start, highlight.end))
+                    }
+                })
+                .collect();
             if highlighted.is_empty() {
                 continue;
             }

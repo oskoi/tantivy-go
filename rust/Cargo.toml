@@ -11,7 +11,7 @@ crate-type = ["staticlib"]
 cbindgen = "0.28.0"
 
 [dependencies]
-tantivy = { git = "https://github.com/anyproto/tantivy.git", rev = "693274a5d4be6da9d069dff4d540162165a99b0e" }
+tantivy = { git = "https://github.com/quickwit-oss/tantivy.git", rev = "b4139bc3536ac7217995633cbd469a4bf2a23fc3" }
 cbindgen = "0.28.0"
 log = "0.4.26"
 env_logger = "0.11.6"
@@ -20,10 +20,5 @@ serde = { version = "1.0.218", features = ["derive"] }
 unicode-segmentation = "1.12.0"
 logcall = "0.1.11"
 lazy_static = "1.5.0"
-tantivy-jieba = { git = "https://github.com/anyproto/tantivy-jieba.git", rev = "ca11d3153b8844cbc43cd243667e03f56f6d1e18", optional = true }
 phf = { version = "0.11.2", features = ["macros"] }
 crunchy = "=0.2.2" #https://github.com/eira-fransham/crunchy/issues/13
-
-[features]
-default = ["jieba"]
-jieba = ["dep:tantivy-jieba"]

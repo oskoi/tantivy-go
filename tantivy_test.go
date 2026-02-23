@@ -16,8 +16,6 @@ import (
 const NameBody = "body"
 const NameId = "id"
 const NameTitle = "title"
-const NameBodyZh = "bodyZh"
-const NameTitleZh = "titleZh"
 
 const limit = 40
 const minGram = 2
@@ -675,42 +673,6 @@ func Test(t *testing.T) {
 		require.Equal(t, uint64(0), docs)
 	})
 
-	t.Run("docs search - when jieba", func(t *testing.T) {
-		_, tc := fx(t, limit, 1, false, false)
-
-		defer func() {
-			err := tc.Close()
-			require.NoError(t, err)
-		}()
-
-		doc, err := addDoc(t, "", "张华考上了北京大学；李萍进了中等技术学校；我在百货公司当售货员：我们都有光明的前途", "1", tc)
-		require.NoError(t, err)
-
-		doc2, err := addDoc(t, "张华考上了北京大学；李萍进了中等技术学校；我在百货公司当售货员：我们都有光明的前途", "", "2", tc)
-		require.NoError(t, err)
-
-		err = tc.AddAndConsumeDocuments(doc, doc2)
-		require.NoError(t, err)
-
-		docs, err := tc.NumDocs()
-		require.NoError(t, err)
-		require.Equal(t, uint64(2), docs)
-
-		sCtx := tantivy_go.NewSearchContextBuilder().
-			SetQuery("售货员").
-			SetDocsLimit(100).
-			SetWithHighlights(true).
-			AddFieldDefaultWeight(NameBodyZh).
-			AddFieldDefaultWeight(NameTitleZh).
-			Build()
-		result, err := tc.Search(sCtx)
-		require.NoError(t, err)
-
-		size, err := result.GetSize()
-		defer result.Free()
-		require.Equal(t, 2, int(size))
-	})
-
 	t.Run("correct search query parse", func(t *testing.T) {
 		qb := tantivy_go.NewQueryBuilder()
 
@@ -1191,13 +1153,13 @@ func addDoc(
 ) (*tantivy_go.Document, error) {
 	doc := tantivy_go.NewDocument()
 
-	err := doc.AddFields(title, tc, NameTitle, NameBodyZh)
+	err := doc.AddField(title, tc, NameTitle)
 	require.NoError(t, err)
 
 	err = doc.AddField(id, tc, NameId)
 	require.NoError(t, err)
 
-	err = doc.AddFields(body, tc, NameBody, NameBodyZh)
+	err = doc.AddField(body, tc, NameBody)
 	require.NoError(t, err)
 
 	return doc, err
@@ -1227,16 +1189,6 @@ func fx(
 	require.NoError(t, err)
 
 	err = builder.AddTextField(
-		NameTitleZh,
-		true,
-		true,
-		false,
-		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
-		tantivy_go.TokenizerJieba,
-	)
-	require.NoError(t, err)
-
-	err = builder.AddTextField(
 		NameId,
 		true,
 		false,
@@ -1256,16 +1208,6 @@ func fx(
 	)
 	require.NoError(t, err)
 
-	err = builder.AddTextField(
-		NameBodyZh,
-		true,
-		true,
-		false,
-		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
-		tantivy_go.TokenizerJieba,
-	)
-	require.NoError(t, err)
-
 	schema, err := builder.BuildSchema()
 	require.NoError(t, err)
 
@@ -1274,9 +1216,6 @@ func fx(
 	require.NoError(t, err)
 
 	err = tc.RegisterTextAnalyzerSimple(tantivy_go.TokenizerSimple, limit, tantivy_go.English)
-	require.NoError(t, err)
-
-	err = tc.RegisterTextAnalyzerJieba(tantivy_go.TokenizerJieba, limit)
 	require.NoError(t, err)
 
 	err = tc.RegisterTextAnalyzerEdgeNgram(tantivy_go.TokenizerEdgeNgram, minGram, 4, 100)
@@ -1317,14 +1256,11 @@ func defaultTokenizerConfig() *tantivyConfig {
 		rustConfig:  "debug",
 		fields: []*fieldConfig{
 			{NameTitle, true, true, false, tantivy_go.IndexRecordOptionWithFreqsAndPositions, tantivy_go.TokenizerNgram},
-			{NameTitleZh, true, true, false, tantivy_go.IndexRecordOptionWithFreqsAndPositions, tantivy_go.TokenizerJieba},
 			{NameId, true, false, false, tantivy_go.IndexRecordOptionBasic, tantivy_go.TokenizerRaw},
 			{NameBody, true, true, false, tantivy_go.IndexRecordOptionWithFreqsAndPositions, tantivy_go.TokenizerSimple},
-			{NameBodyZh, true, true, false, tantivy_go.IndexRecordOptionWithFreqsAndPositions, tantivy_go.TokenizerJieba},
 		},
 		tokenizerConfigs: []*tokenizerConfigItem{
 			{tantivy_go.TokenizerSimple, []interface{}{uintptr(100), tantivy_go.English}},
-			{tantivy_go.TokenizerJieba, []interface{}{uintptr(100)}},
 			{tantivy_go.TokenizerEdgeNgram, []interface{}{uintptr(minGram), uintptr(maxGram), uintptr(limit)}},
 			{tantivy_go.TokenizerNgram, []interface{}{uintptr(minGram), uintptr(maxGram), false}},
 			{tantivy_go.TokenizerRaw, nil},
@@ -1397,8 +1333,6 @@ func fxWithConfig(t *testing.T, config *tantivyConfig) (*tantivy_go.Schema, *tan
 		switch tokenizer.Type {
 		case tantivy_go.TokenizerSimple:
 			err = tc.RegisterTextAnalyzerSimple(tokenizer.Type, tokenizer.args[0].(uintptr), tokenizer.args[1].(tantivy_go.Language))
-		case tantivy_go.TokenizerJieba:
-			err = tc.RegisterTextAnalyzerJieba(tokenizer.Type, tokenizer.args[0].(uintptr))
 		case tantivy_go.TokenizerEdgeNgram:
 			err = tc.RegisterTextAnalyzerEdgeNgram(tokenizer.Type, tokenizer.args[0].(uintptr), tokenizer.args[1].(uintptr), tokenizer.args[2].(uintptr))
 		case tantivy_go.TokenizerNgram:

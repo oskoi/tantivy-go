@@ -1,4 +1,6 @@
-use tantivy::schema::{FAST, IndexRecordOption, SchemaBuilder, STORED, STRING, TEXT, TextFieldIndexing};
+use tantivy::schema::{
+    IndexRecordOption, SchemaBuilder, TextFieldIndexing, FAST, STORED, STRING, TEXT,
+};
 
 pub fn add_text_field(
     stored: bool,
@@ -10,12 +12,20 @@ pub fn add_text_field(
     index_record_option: IndexRecordOption,
 ) -> u32 {
     let mut text_options = if is_text { TEXT } else { STRING };
-    text_options = if stored { text_options | STORED } else { text_options };
-    text_options = if is_fast { text_options | FAST } else { text_options };
+    text_options = if stored {
+        text_options | STORED
+    } else {
+        text_options
+    };
+    text_options = if is_fast {
+        text_options | FAST
+    } else {
+        text_options
+    };
     text_options = text_options.set_indexing_options(
         TextFieldIndexing::default()
             .set_tokenizer(tokenizer_name)
-            .set_index_option(index_record_option)
+            .set_index_option(index_record_option),
     );
     builder.add_text_field(field_name, text_options).field_id()
 }

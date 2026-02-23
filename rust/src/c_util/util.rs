@@ -16,7 +16,9 @@ use std::{fs, panic, slice};
 use tantivy::directory::MmapDirectory;
 use tantivy::query::{Query, QueryParser};
 use tantivy::schema::{Field, Schema};
-use tantivy::{Index, IndexWriter, Opstamp, ReloadPolicy, Score, TantivyDocument, TantivyError, Term};
+use tantivy::{
+    Index, IndexWriter, Opstamp, ReloadPolicy, Score, TantivyDocument, TantivyError, Term,
+};
 
 pub fn set_error(err: &str, error_buffer: *mut *mut c_char) {
     let err_str = match CString::new(err) {
@@ -194,7 +196,10 @@ fn create_tantivy_context(
 ) -> Result<TantivyContext, TantivyError> {
     let index = Index::open_or_create(dir, schema)?;
     let writer = index.writer(DOCUMENT_BUDGET_BYTES)?;
-    let reader = index.reader_builder().reload_policy(ReloadPolicy::Manual).try_into()?;
+    let reader = index
+        .reader_builder()
+        .reload_policy(ReloadPolicy::Manual)
+        .try_into()?;
     Ok(TantivyContext::new(index, writer, reader))
 }
 

@@ -11,9 +11,9 @@ use crate::c_util::{
     search, search_fast_field, search_fast_field_json, search_json, set_error, start_lib_init,
 };
 use crate::tantivy_util::{
-    add_text_field, register_edge_ngram_tokenizer, register_jieba_tokenizer,
-    register_ngram_tokenizer, register_raw_tokenizer, register_simple_tokenizer, Document,
-    SearchResult, TantivyContext, TantivyGoError,
+    add_text_field, register_edge_ngram_tokenizer, register_ngram_tokenizer,
+    register_raw_tokenizer, register_simple_tokenizer, Document, SearchResult, TantivyContext,
+    TantivyGoError,
 };
 
 mod c_util;
@@ -194,26 +194,6 @@ pub extern "C" fn context_register_text_analyzer_simple(
 
 #[logcall]
 #[no_mangle]
-pub extern "C" fn context_register_jieba_tokenizer(
-    context_ptr: *mut TantivyContext,
-    tokenizer_name_ptr: *const c_char,
-    text_limit: usize,
-    error_buffer: *mut *mut c_char,
-) {
-    let result = || -> Result<(), TantivyGoError> {
-        let context = assert_pointer(context_ptr)?;
-        let tokenizer_name = assert_string(tokenizer_name_ptr)?;
-        register_jieba_tokenizer(text_limit, &context.index, tokenizer_name.as_str());
-        Ok(())
-    };
-
-    if let Err(err) = result() {
-        set_error(&err.to_string(), error_buffer);
-    }
-}
-
-#[logcall]
-#[no_mangle]
 pub extern "C" fn context_register_text_analyzer_raw(
     context_ptr: *mut TantivyContext,
     tokenizer_name_ptr: *const c_char,
@@ -290,7 +270,7 @@ pub extern "C" fn context_batch_add_and_delete_documents(
 ) -> u64 {
     let result = || -> Result<Opstamp, TantivyGoError> {
         let context = assert_pointer(context_ptr)?;
-        
+
         // First, delete documents (without committing)
         if delete_ids_len > 0 {
             let field = Field::from_field_id(delete_field_id);
@@ -302,7 +282,7 @@ pub extern "C" fn context_batch_add_and_delete_documents(
                     .delete_term(Term::from_field_text(field, &id_value));
             }
         }
-        
+
         // Then, add all documents (without committing)
         if add_docs_len > 0 {
             let slice = unsafe { std::slice::from_raw_parts(add_docs_ptr, add_docs_len) };
@@ -315,7 +295,7 @@ pub extern "C" fn context_batch_add_and_delete_documents(
                 // Doc is consumed, Box automatically drops the rest
             }
         }
-        
+
         // Finally, commit everything at once
         let opstamp = context.writer.commit().map_err(|err| {
             // TEMPORARILY DISABLED: Tantivy has a critical bug in the rollback mechanism
@@ -522,12 +502,8 @@ pub extern "C" fn context_search_fast_field_json(
             return Err(TantivyGoError("Output pointers are null".to_string()));
         }
 
-        let (scores, values) = search_fast_field_json(
-            query_ptr,
-            fast_field_id,
-            docs_limit,
-            context,
-        )?;
+        let (scores, values) =
+            search_fast_field_json(query_ptr, fast_field_id, docs_limit, context)?;
 
         let count = scores.len();
         if count == 0 {
@@ -747,20 +723,23 @@ pub unsafe extern "C" fn init_lib(
 
 #[logcall]
 #[no_mangle]
-pub extern "C" fn context_wait_and_free(context_ptr: *mut TantivyContext, error_buffer: *mut *mut c_char) {
+pub extern "C" fn context_wait_and_free(
+    context_ptr: *mut TantivyContext,
+    error_buffer: *mut *mut c_char,
+) {
     if context_ptr.is_null() {
         return;
     }
-    
+
     let result = || -> Result<(), TantivyGoError> {
         // Get ownership of the context
         let context = unsafe { Box::from_raw(context_ptr) };
-        
+
         // Call wait_merging_threads on the writer
         context.writer.wait_merging_threads().map_err(|err| {
             TantivyGoError::from_err("Failed to wait for merging threads", &err.to_string())
         })?;
-        
+
         // Box drops automatically when this function ends
         Ok(())
     };
@@ -799,7 +778,7 @@ pub extern "C" fn context_reload_reader(
     };
 
     match result() {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(err) => {
             set_error(&err.to_string(), error_buffer);
         }
@@ -814,7 +793,7 @@ pub extern "C" fn context_garbage_collect_files(
 ) -> u64 {
     let result = || -> Result<u64, TantivyGoError> {
         let context = assert_pointer(context_ptr)?;
-        
+
         // Get living files by checking searchable segments
         let mut living_files = std::collections::HashSet::new();
         if let Ok(segment_metas) = context.index.searchable_segment_metas() {
@@ -824,12 +803,15 @@ pub extern "C" fn context_garbage_collect_files(
                 }
             }
         }
-        
+
         // Get mutable reference to directory and perform garbage collection
         let directory = context.index.directory_mut();
         match directory.garbage_collect(|| living_files.clone()) {
             Ok(gc_result) => Ok(gc_result.deleted_files.len() as u64),
-            Err(err) => Err(TantivyGoError::from_err("Garbage collection failed", &err.to_string())),
+            Err(err) => Err(TantivyGoError::from_err(
+                "Garbage collection failed",
+                &err.to_string(),
+            )),
         }
     };
 

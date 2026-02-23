@@ -35,13 +35,18 @@ pub fn read_fast_field_values(
 
         let str_column: StrColumn = fast_fields
             .str(field_name)
-            .map_err(|e| TantivyGoError::from_err(
-                &format!("Failed to get fast field '{}'", field_name),
-                &e.to_string(),
-            ))?
-            .ok_or_else(|| TantivyGoError(
-                format!("Fast field '{}' not found in segment {}", field_name, segment_ord),
-            ))?;
+            .map_err(|e| {
+                TantivyGoError::from_err(
+                    &format!("Failed to get fast field '{}'", field_name),
+                    &e.to_string(),
+                )
+            })?
+            .ok_or_else(|| {
+                TantivyGoError(format!(
+                    "Fast field '{}' not found in segment {}",
+                    field_name, segment_ord
+                ))
+            })?;
 
         for (result_idx, doc_id) in docs {
             buffer.clear();

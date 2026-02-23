@@ -1,7 +1,6 @@
 use serde::Serialize;
 use tantivy::{Index, IndexReader, IndexWriter, TantivyDocument};
 
-
 pub struct TantivyContext {
     pub index: Index,
     pub writer: IndexWriter,
@@ -13,7 +12,7 @@ impl TantivyContext {
         TantivyContext {
             index,
             writer,
-            reader
+            reader,
         }
     }
 
@@ -38,7 +37,7 @@ pub struct Highlight {
 
 #[derive(Clone, Serialize)]
 pub struct Fragment {
-    pub t: String, //to comply with bleve temporarily
+    pub t: String,              //to comply with bleve temporarily
     pub r: Vec<(usize, usize)>, //to comply with bleve temporarily
 }
 
