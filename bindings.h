@@ -46,6 +46,13 @@ uint32_t schema_builder_add_f64_field(SchemaBuilder *builder_ptr,
                                       bool is_indexed,
                                       char **error_buffer);
 
+uint32_t schema_builder_add_date_field(SchemaBuilder *builder_ptr,
+                                       const char *field_name_ptr,
+                                       bool stored,
+                                       bool is_fast,
+                                       bool is_indexed,
+                                       char **error_buffer);
+
 struct TantivyContext *context_create_with_schema(const char *path_ptr,
                                                   Schema *schema_ptr,
                                                   char **error_buffer);
@@ -189,6 +196,11 @@ void document_add_f64_field(struct Document *doc_ptr,
                             unsigned int field_id,
                             double field_value,
                             char **error_buffer);
+
+void document_add_date_field(struct Document *doc_ptr,
+                             unsigned int field_id,
+                             int64_t timestamp_millis,
+                             char **error_buffer);
 
 char *document_as_json(struct Document *doc_ptr,
                        unsigned int *include_field_ids_ptr,

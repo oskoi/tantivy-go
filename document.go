@@ -101,6 +101,18 @@ func (d *Document) AddF64Field(value float64, tc *TantivyContext, fieldName stri
 	return tryExtractError(errBuffer)
 }
 
+// AddDateField adds a date field to the document.
+// The value should be a Unix timestamp in milliseconds.
+func (d *Document) AddDateField(timestampMillis int64, tc *TantivyContext, fieldName string) error {
+	fieldId, contains := tc.schema.fieldNames[fieldName]
+	if !contains {
+		return errors.New("field not found in schema")
+	}
+	var errBuffer *C.char
+	C.document_add_date_field(d.ptr, C.uint(fieldId), C.int64_t(timestampMillis), &errBuffer)
+	return tryExtractError(errBuffer)
+}
+
 // ToJson converts the document to its JSON representation based on the provided schema.
 // Optionally, specific fields can be included in the JSON output.
 //

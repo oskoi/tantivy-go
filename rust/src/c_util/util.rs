@@ -329,6 +329,17 @@ pub fn add_f64_field<'a>(
     Ok(())
 }
 
+pub fn add_date_field<'a>(
+    doc: &mut Document,
+    field_id: u32,
+    timestamp_millis: i64,
+) -> Result<(), TantivyGoError> {
+    let datetime = tantivy::DateTime::from_timestamp_millis(timestamp_millis);
+    doc.tantivy_doc
+        .add_date(Field::from_field_id(field_id), datetime);
+    Ok(())
+}
+
 fn perform_search<F>(
     query_parser_fn: F,
     docs_limit: usize,

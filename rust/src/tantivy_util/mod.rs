@@ -17,6 +17,7 @@ pub use self::models::Fragment;
 pub use self::models::Highlight;
 pub use self::models::SearchResult;
 pub use self::models::TantivyContext;
+pub use self::scheme_builder::add_schema_date_field;
 pub use self::scheme_builder::add_schema_f64_field;
 pub use self::scheme_builder::add_schema_i64_field;
 pub use self::scheme_builder::add_schema_u64_field;

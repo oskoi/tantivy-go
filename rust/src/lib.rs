@@ -6,15 +6,16 @@ use tantivy::schema::*;
 use tantivy::{Opstamp, Term};
 
 use crate::c_util::{
-    add_and_consume_documents, add_f64_field, add_field, add_fields, add_i64_field, add_u64_field,
-    assert_pointer, assert_str, assert_string, box_from, convert_document_as_json,
+    add_and_consume_documents, add_date_field, add_f64_field, add_field, add_fields, add_i64_field,
+    add_u64_field, assert_pointer, assert_str, assert_string, box_from, convert_document_as_json,
     create_context_with_schema, delete_docs, drop_any, get_doc, search, search_fast_field,
     search_fast_field_json, search_json, search_query_parser, set_error, start_lib_init,
 };
 use crate::tantivy_util::{
-    add_schema_f64_field, add_schema_i64_field, add_schema_u64_field, add_text_field,
-    register_edge_ngram_tokenizer, register_ngram_tokenizer, register_raw_tokenizer,
-    register_simple_tokenizer, Document, SearchResult, TantivyContext, TantivyGoError,
+    add_schema_date_field, add_schema_f64_field, add_schema_i64_field, add_schema_u64_field,
+    add_text_field, register_edge_ngram_tokenizer, register_ngram_tokenizer,
+    register_raw_tokenizer, register_simple_tokenizer, Document, SearchResult, TantivyContext,
+    TantivyGoError,
 };
 
 mod c_util;
@@ -169,6 +170,37 @@ pub extern "C" fn schema_builder_add_f64_field(
         let builder = assert_pointer(builder_ptr)?;
         let field_name = assert_string(field_name_ptr)?;
         Ok(add_schema_f64_field(
+            stored,
+            is_fast,
+            is_indexed,
+            builder,
+            field_name.as_str(),
+        ))
+    };
+
+    match result() {
+        Ok(val) => val,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn schema_builder_add_date_field(
+    builder_ptr: *mut SchemaBuilder,
+    field_name_ptr: *const c_char,
+    stored: bool,
+    is_fast: bool,
+    is_indexed: bool,
+    error_buffer: *mut *mut c_char,
+) -> u32 {
+    let result = || -> Result<u32, TantivyGoError> {
+        let builder = assert_pointer(builder_ptr)?;
+        let field_name = assert_string(field_name_ptr)?;
+        Ok(add_schema_date_field(
             stored,
             is_fast,
             is_indexed,
@@ -823,6 +855,27 @@ pub extern "C" fn document_add_f64_field(
     let result = || -> Result<(), TantivyGoError> {
         let doc = assert_pointer(doc_ptr)?;
         add_f64_field(doc, field_id, field_value)
+    };
+
+    match result() {
+        Ok(_) => {}
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn document_add_date_field(
+    doc_ptr: *mut Document,
+    field_id: c_uint,
+    timestamp_millis: i64,
+    error_buffer: *mut *mut c_char,
+) {
+    let result = || -> Result<(), TantivyGoError> {
+        let doc = assert_pointer(doc_ptr)?;
+        add_date_field(doc, field_id, timestamp_millis)
     };
 
     match result() {

@@ -27,6 +27,19 @@ builder.AddI64Field("temperature", true, true, true)
 builder.AddF64Field("score", true, true, true)
 ```
 
+### Date Field Support
+Supports date/datetime fields with Unix timestamp (milliseconds) storage:
+```go
+// Add date field to schema
+builder.AddDateField("created_at", true, true, true)  // stored, fast, indexed
+
+// Add date to document (Unix timestamp in milliseconds)
+doc.AddDateField(time.Now().UnixMilli(), tc, "created_at")
+
+// Search by date range using RFC3339 format
+result, err := tc.SearchQueryParser("created_at:[2024-01-01T00:00:00Z TO 2024-12-31T23:59:59Z]", 10, false)
+```
+
 ### Range Queries
 Supports range queries using tantivy's query parser syntax:
 ```go
