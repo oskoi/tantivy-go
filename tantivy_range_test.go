@@ -4,11 +4,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/anyproto/tantivy-go/internal"
+	"github.com/oskoi/tantivy-go/internal"
 
 	"github.com/stretchr/testify/require"
 
-	tantivy_go "github.com/anyproto/tantivy-go"
+	tantivy_go "github.com/oskoi/tantivy-go"
 )
 
 func TestRangeQueries(t *testing.T) {

@@ -69,7 +69,7 @@ result, err := tc.SearchQueryParser("title:Product AND price:[20 TO 150]", 10, f
 ## Installation
 
 ```bash
-go get github.com/anyproto/tantivy-go
+go get github.com/oskoi/tantivy-go
 ```
 
 Ensure your libraries are in your `ld` path.

@@ -3,7 +3,7 @@ package gomobile
 import (
 	_ "golang.org/x/mobile/bind"
 
-	_ "github.com/anyproto/tantivy-go"
+	_ "github.com/oskoi/tantivy-go"
 )
 
 func DoNothing() {

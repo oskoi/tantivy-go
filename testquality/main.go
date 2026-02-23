@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/anyproto/tantivy-go"
+	"github.com/oskoi/tantivy-go"
 	"math"
 	"os"
 	"strings"

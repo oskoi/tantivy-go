@@ -3,7 +3,7 @@ package tantivy_go
 import (
 	"sync"
 
-	"github.com/anyproto/tantivy-go/internal"
+	"github.com/oskoi/tantivy-go/internal"
 )
 
 // Activate after migration to the go 1.24

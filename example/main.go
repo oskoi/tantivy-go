@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anyproto/tantivy-go"
+	"github.com/oskoi/tantivy-go"
 )
 
 const NameBody = "body"

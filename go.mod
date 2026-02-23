@@ -1,4 +1,4 @@
-module github.com/anyproto/tantivy-go
+module github.com/oskoi/tantivy-go
 
 go 1.23.2
 
