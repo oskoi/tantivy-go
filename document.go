@@ -68,6 +68,39 @@ func (d *Document) AddFields(fieldValue string, tc *TantivyContext, fieldNames .
 	return tryExtractError(errBuffer)
 }
 
+// AddU64Field adds an unsigned 64-bit integer field to the document.
+func (d *Document) AddU64Field(value uint64, tc *TantivyContext, fieldName string) error {
+	fieldId, contains := tc.schema.fieldNames[fieldName]
+	if !contains {
+		return errors.New("field not found in schema")
+	}
+	var errBuffer *C.char
+	C.document_add_u64_field(d.ptr, C.uint(fieldId), C.uint64_t(value), &errBuffer)
+	return tryExtractError(errBuffer)
+}
+
+// AddI64Field adds a signed 64-bit integer field to the document.
+func (d *Document) AddI64Field(value int64, tc *TantivyContext, fieldName string) error {
+	fieldId, contains := tc.schema.fieldNames[fieldName]
+	if !contains {
+		return errors.New("field not found in schema")
+	}
+	var errBuffer *C.char
+	C.document_add_i64_field(d.ptr, C.uint(fieldId), C.int64_t(value), &errBuffer)
+	return tryExtractError(errBuffer)
+}
+
+// AddF64Field adds a 64-bit floating point field to the document.
+func (d *Document) AddF64Field(value float64, tc *TantivyContext, fieldName string) error {
+	fieldId, contains := tc.schema.fieldNames[fieldName]
+	if !contains {
+		return errors.New("field not found in schema")
+	}
+	var errBuffer *C.char
+	C.document_add_f64_field(d.ptr, C.uint(fieldId), C.double(value), &errBuffer)
+	return tryExtractError(errBuffer)
+}
+
 // ToJson converts the document to its JSON representation based on the provided schema.
 // Optionally, specific fields can be included in the JSON output.
 //

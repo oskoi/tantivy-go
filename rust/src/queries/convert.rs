@@ -237,6 +237,8 @@ pub fn convert_to_tantivy(
                     }
                 }
                 GoQuery::AllQuery { boost } => Some(try_boost(occur, *boost, Box::new(TAllQuery))),
+                // Note: RangeQuery and FuzzyQuery are not yet implemented
+                // They require tantivy API changes or query parser usage
                 GoQuery::BoolQuery { subqueries, boost } => {
                     let mut child = Vec::new();
                     for sq in subqueries {

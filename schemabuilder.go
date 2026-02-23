@@ -117,3 +117,87 @@ func (b *SchemaBuilder) BuildSchema() (*Schema, error) {
 		fieldNames: b.fieldNames,
 	}, nil
 }
+
+// AddU64Field adds an unsigned 64-bit integer field to the schema.
+// Parameters:
+//   - name: The name of the field.
+//   - stored: Whether the field should be stored in the index.
+//   - isFast: Whether the field should be a fast field.
+//   - isIndexed: Whether the field should be indexed for range queries.
+//
+// Returns an error if the field could not be added.
+func (b *SchemaBuilder) AddU64Field(name string, stored bool, isFast bool, isIndexed bool) error {
+	if _, contains := b.fieldNames[name]; contains {
+		return errors.New("field already defined: " + name)
+	}
+	b.fieldNames[name] = -1
+	cName := C.CString(name)
+	defer C.string_free(cName)
+	var errBuffer *C.char
+	fieldId := C.schema_builder_add_u64_field(
+		b.ptr,
+		cName,
+		C._Bool(stored),
+		C._Bool(isFast),
+		C._Bool(isIndexed),
+		&errBuffer,
+	)
+	b.fieldNames[name] = int(fieldId)
+	return tryExtractError(errBuffer)
+}
+
+// AddI64Field adds a signed 64-bit integer field to the schema.
+// Parameters:
+//   - name: The name of the field.
+//   - stored: Whether the field should be stored in the index.
+//   - isFast: Whether the field should be a fast field.
+//   - isIndexed: Whether the field should be indexed for range queries.
+//
+// Returns an error if the field could not be added.
+func (b *SchemaBuilder) AddI64Field(name string, stored bool, isFast bool, isIndexed bool) error {
+	if _, contains := b.fieldNames[name]; contains {
+		return errors.New("field already defined: " + name)
+	}
+	b.fieldNames[name] = -1
+	cName := C.CString(name)
+	defer C.string_free(cName)
+	var errBuffer *C.char
+	fieldId := C.schema_builder_add_i64_field(
+		b.ptr,
+		cName,
+		C._Bool(stored),
+		C._Bool(isFast),
+		C._Bool(isIndexed),
+		&errBuffer,
+	)
+	b.fieldNames[name] = int(fieldId)
+	return tryExtractError(errBuffer)
+}
+
+// AddF64Field adds a 64-bit floating point field to the schema.
+// Parameters:
+//   - name: The name of the field.
+//   - stored: Whether the field should be stored in the index.
+//   - isFast: Whether the field should be a fast field.
+//   - isIndexed: Whether the field should be indexed for range queries.
+//
+// Returns an error if the field could not be added.
+func (b *SchemaBuilder) AddF64Field(name string, stored bool, isFast bool, isIndexed bool) error {
+	if _, contains := b.fieldNames[name]; contains {
+		return errors.New("field already defined: " + name)
+	}
+	b.fieldNames[name] = -1
+	cName := C.CString(name)
+	defer C.string_free(cName)
+	var errBuffer *C.char
+	fieldId := C.schema_builder_add_f64_field(
+		b.ptr,
+		cName,
+		C._Bool(stored),
+		C._Bool(isFast),
+		C._Bool(isIndexed),
+		&errBuffer,
+	)
+	b.fieldNames[name] = int(fieldId)
+	return tryExtractError(errBuffer)
+}

@@ -11,12 +11,14 @@ pub const DOCUMENT_BUDGET_BYTES: usize = 50_000_000;
 pub fn extract_text_from_owned_value<'a>(
     value: &'a ReferenceValueLeaf<'a>,
 ) -> Result<Cow<'a, str>, TantivyGoError> {
-    if let ReferenceValueLeaf::Str(text) = value {
-        Ok(Cow::Borrowed(text))
-    } else {
-        Err(TantivyGoError(
-            "Only OwnedValue::Str is supported".to_string(),
-        ))
+    match value {
+        ReferenceValueLeaf::Str(text) => Ok(Cow::Borrowed(text)),
+        ReferenceValueLeaf::U64(num) => Ok(Cow::Owned(num.to_string())),
+        ReferenceValueLeaf::I64(num) => Ok(Cow::Owned(num.to_string())),
+        ReferenceValueLeaf::F64(num) => Ok(Cow::Owned(num.to_string())),
+        ReferenceValueLeaf::Bool(b) => Ok(Cow::Owned(b.to_string())),
+        ReferenceValueLeaf::Date(date) => Ok(Cow::Owned(date.into_timestamp_millis().to_string())),
+        _ => Err(TantivyGoError("Unsupported value type".to_string())),
     }
 }
 

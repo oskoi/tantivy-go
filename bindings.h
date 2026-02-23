@@ -25,6 +25,27 @@ uint32_t schema_builder_add_text_field(SchemaBuilder *builder_ptr,
 
 Schema *schema_builder_build(SchemaBuilder *builder_ptr, char **error_buffer);
 
+uint32_t schema_builder_add_u64_field(SchemaBuilder *builder_ptr,
+                                      const char *field_name_ptr,
+                                      bool stored,
+                                      bool is_fast,
+                                      bool is_indexed,
+                                      char **error_buffer);
+
+uint32_t schema_builder_add_i64_field(SchemaBuilder *builder_ptr,
+                                      const char *field_name_ptr,
+                                      bool stored,
+                                      bool is_fast,
+                                      bool is_indexed,
+                                      char **error_buffer);
+
+uint32_t schema_builder_add_f64_field(SchemaBuilder *builder_ptr,
+                                      const char *field_name_ptr,
+                                      bool stored,
+                                      bool is_fast,
+                                      bool is_indexed,
+                                      char **error_buffer);
+
 struct TantivyContext *context_create_with_schema(const char *path_ptr,
                                                   Schema *schema_ptr,
                                                   char **error_buffer);
@@ -121,6 +142,16 @@ uintptr_t context_search_fast_field_json(struct TantivyContext *context_ptr,
                                          char **out_values_ptr,
                                          char **error_buffer);
 
+/**
+ * Performs a search using a query parser string (supports range queries, fuzzy queries, etc.)
+ * Returns a SearchResult pointer or null on error.
+ */
+struct SearchResult *context_search_query_parser(struct TantivyContext *context_ptr,
+                                                 const char *query_ptr,
+                                                 uintptr_t docs_limit,
+                                                 bool with_highlights,
+                                                 char **error_buffer);
+
 void context_free(struct TantivyContext *context_ptr);
 
 uintptr_t search_result_get_size(struct SearchResult *result_ptr, char **error_buffer);
@@ -143,6 +174,21 @@ void document_add_fields(struct Document *doc_ptr,
                          uintptr_t field_ids_len,
                          const char *field_value_ptr,
                          char **error_buffer);
+
+void document_add_u64_field(struct Document *doc_ptr,
+                            unsigned int field_id,
+                            uint64_t field_value,
+                            char **error_buffer);
+
+void document_add_i64_field(struct Document *doc_ptr,
+                            unsigned int field_id,
+                            int64_t field_value,
+                            char **error_buffer);
+
+void document_add_f64_field(struct Document *doc_ptr,
+                            unsigned int field_id,
+                            double field_value,
+                            char **error_buffer);
 
 char *document_as_json(struct Document *doc_ptr,
                        unsigned int *include_field_ids_ptr,

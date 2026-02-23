@@ -299,6 +299,36 @@ pub fn add_field<'a>(
     Ok(())
 }
 
+pub fn add_u64_field<'a>(
+    doc: &mut Document,
+    field_id: u32,
+    field_value: u64,
+) -> Result<(), TantivyGoError> {
+    doc.tantivy_doc
+        .add_u64(Field::from_field_id(field_id), field_value);
+    Ok(())
+}
+
+pub fn add_i64_field<'a>(
+    doc: &mut Document,
+    field_id: u32,
+    field_value: i64,
+) -> Result<(), TantivyGoError> {
+    doc.tantivy_doc
+        .add_i64(Field::from_field_id(field_id), field_value);
+    Ok(())
+}
+
+pub fn add_f64_field<'a>(
+    doc: &mut Document,
+    field_id: u32,
+    field_value: f64,
+) -> Result<(), TantivyGoError> {
+    doc.tantivy_doc
+        .add_f64(Field::from_field_id(field_id), field_value);
+    Ok(())
+}
+
 fn perform_search<F>(
     query_parser_fn: F,
     docs_limit: usize,
@@ -394,6 +424,29 @@ pub fn search_json(
         context,
         with_highlights,
     )
+}
+
+/// Performs a search using a query parser string (supports range queries, fuzzy queries, etc.)
+pub fn search_query_parser(
+    query_ptr: *const c_char,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+    with_highlights: bool,
+) -> Result<*mut SearchResult, TantivyGoError> {
+    let query_str = assert_string(query_ptr)?;
+
+    let schema = context.index.schema();
+    let mut fields = Vec::new();
+    for (field, _entry) in schema.fields() {
+        fields.push(field);
+    }
+
+    let mut query_parser = QueryParser::for_index(&context.index, fields);
+    let query = query_parser
+        .parse_query(&query_str)
+        .map_err(|e| TantivyGoError(e.to_string()))?;
+
+    perform_search(|_index| Ok(query), docs_limit, context, with_highlights)
 }
 
 /// Performs a search and returns only fast field values (no full document loading).

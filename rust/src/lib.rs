@@ -6,14 +6,15 @@ use tantivy::schema::*;
 use tantivy::{Opstamp, Term};
 
 use crate::c_util::{
-    add_and_consume_documents, add_field, add_fields, assert_pointer, assert_str, assert_string,
-    box_from, convert_document_as_json, create_context_with_schema, delete_docs, drop_any, get_doc,
-    search, search_fast_field, search_fast_field_json, search_json, set_error, start_lib_init,
+    add_and_consume_documents, add_f64_field, add_field, add_fields, add_i64_field, add_u64_field,
+    assert_pointer, assert_str, assert_string, box_from, convert_document_as_json,
+    create_context_with_schema, delete_docs, drop_any, get_doc, search, search_fast_field,
+    search_fast_field_json, search_json, search_query_parser, set_error, start_lib_init,
 };
 use crate::tantivy_util::{
-    add_text_field, register_edge_ngram_tokenizer, register_ngram_tokenizer,
-    register_raw_tokenizer, register_simple_tokenizer, Document, SearchResult, TantivyContext,
-    TantivyGoError,
+    add_schema_f64_field, add_schema_i64_field, add_schema_u64_field, add_text_field,
+    register_edge_ngram_tokenizer, register_ngram_tokenizer, register_raw_tokenizer,
+    register_simple_tokenizer, Document, SearchResult, TantivyContext, TantivyGoError,
 };
 
 mod c_util;
@@ -90,6 +91,99 @@ pub extern "C" fn schema_builder_build(
     };
 
     Box::into_raw(Box::new(builder.build()))
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn schema_builder_add_u64_field(
+    builder_ptr: *mut SchemaBuilder,
+    field_name_ptr: *const c_char,
+    stored: bool,
+    is_fast: bool,
+    is_indexed: bool,
+    error_buffer: *mut *mut c_char,
+) -> u32 {
+    let result = || -> Result<u32, TantivyGoError> {
+        let builder = assert_pointer(builder_ptr)?;
+        let field_name = assert_string(field_name_ptr)?;
+        Ok(add_schema_u64_field(
+            stored,
+            is_fast,
+            is_indexed,
+            builder,
+            field_name.as_str(),
+        ))
+    };
+
+    match result() {
+        Ok(val) => val,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn schema_builder_add_i64_field(
+    builder_ptr: *mut SchemaBuilder,
+    field_name_ptr: *const c_char,
+    stored: bool,
+    is_fast: bool,
+    is_indexed: bool,
+    error_buffer: *mut *mut c_char,
+) -> u32 {
+    let result = || -> Result<u32, TantivyGoError> {
+        let builder = assert_pointer(builder_ptr)?;
+        let field_name = assert_string(field_name_ptr)?;
+        Ok(add_schema_i64_field(
+            stored,
+            is_fast,
+            is_indexed,
+            builder,
+            field_name.as_str(),
+        ))
+    };
+
+    match result() {
+        Ok(val) => val,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn schema_builder_add_f64_field(
+    builder_ptr: *mut SchemaBuilder,
+    field_name_ptr: *const c_char,
+    stored: bool,
+    is_fast: bool,
+    is_indexed: bool,
+    error_buffer: *mut *mut c_char,
+) -> u32 {
+    let result = || -> Result<u32, TantivyGoError> {
+        let builder = assert_pointer(builder_ptr)?;
+        let field_name = assert_string(field_name_ptr)?;
+        Ok(add_schema_f64_field(
+            stored,
+            is_fast,
+            is_indexed,
+            builder,
+            field_name.as_str(),
+        ))
+    };
+
+    match result() {
+        Ok(val) => val,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
 }
 
 #[logcall]
@@ -538,6 +632,31 @@ pub extern "C" fn context_search_fast_field_json(
     }
 }
 
+/// Performs a search using a query parser string (supports range queries, fuzzy queries, etc.)
+/// Returns a SearchResult pointer or null on error.
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_query_parser(
+    context_ptr: *mut TantivyContext,
+    query_ptr: *const c_char,
+    docs_limit: usize,
+    with_highlights: bool,
+    error_buffer: *mut *mut c_char,
+) -> *mut SearchResult {
+    let result = || -> Result<*mut SearchResult, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        search_query_parser(query_ptr, docs_limit, context, with_highlights)
+    };
+
+    match result() {
+        Ok(result) => result,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            ptr::null_mut()
+        }
+    }
+}
+
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[logcall]
 #[no_mangle]
@@ -641,6 +760,69 @@ pub extern "C" fn document_add_fields(
         let field_value = assert_str(field_value_ptr)?;
 
         add_fields(doc, field_ids, field_ids_len, &field_value)
+    };
+
+    match result() {
+        Ok(_) => {}
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn document_add_u64_field(
+    doc_ptr: *mut Document,
+    field_id: c_uint,
+    field_value: u64,
+    error_buffer: *mut *mut c_char,
+) {
+    let result = || -> Result<(), TantivyGoError> {
+        let doc = assert_pointer(doc_ptr)?;
+        add_u64_field(doc, field_id, field_value)
+    };
+
+    match result() {
+        Ok(_) => {}
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn document_add_i64_field(
+    doc_ptr: *mut Document,
+    field_id: c_uint,
+    field_value: i64,
+    error_buffer: *mut *mut c_char,
+) {
+    let result = || -> Result<(), TantivyGoError> {
+        let doc = assert_pointer(doc_ptr)?;
+        add_i64_field(doc, field_id, field_value)
+    };
+
+    match result() {
+        Ok(_) => {}
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn document_add_f64_field(
+    doc_ptr: *mut Document,
+    field_id: c_uint,
+    field_value: f64,
+    error_buffer: *mut *mut c_char,
+) {
+    let result = || -> Result<(), TantivyGoError> {
+        let doc = assert_pointer(doc_ptr)?;
+        add_f64_field(doc, field_id, field_value)
     };
 
     match result() {

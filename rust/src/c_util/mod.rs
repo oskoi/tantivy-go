@@ -1,8 +1,11 @@
 mod util;
 
 pub use self::util::add_and_consume_documents;
+pub use self::util::add_f64_field;
 pub use self::util::add_field;
 pub use self::util::add_fields;
+pub use self::util::add_i64_field;
+pub use self::util::add_u64_field;
 pub use self::util::assert_pointer;
 pub use self::util::assert_str;
 pub use self::util::assert_string;
@@ -16,5 +19,6 @@ pub use self::util::search;
 pub use self::util::search_fast_field;
 pub use self::util::search_fast_field_json;
 pub use self::util::search_json;
+pub use self::util::search_query_parser;
 pub use self::util::set_error;
 pub use self::util::start_lib_init;

@@ -315,6 +315,37 @@ func (tc *TantivyContext) SearchJson(sCtx SearchContext) (*SearchResult, error) 
 	return &SearchResult{ptr: ptr}, nil
 }
 
+// SearchQueryParser performs a search using tantivy's query parser syntax.
+// Supports range queries (e.g., "price:[10 TO 100]"), fuzzy queries, wildcards, etc.
+//
+// Parameters:
+//   - query: The query string in tantivy query parser syntax
+//   - docsLimit: Maximum number of documents to return
+//   - withHighlights: Whether to include highlighted snippets
+//
+// Returns:
+//   - *SearchResult: A pointer to the SearchResult containing the search results.
+//   - error: An error if the search fails.
+func (tc *TantivyContext) SearchQueryParser(query string, docsLimit int, withHighlights bool) (*SearchResult, error) {
+	cQuery := C.CString(query)
+	defer C.string_free(cQuery)
+
+	var errBuffer *C.char
+	ptr := C.context_search_query_parser(
+		tc.ptr,
+		cQuery,
+		pointerCType(docsLimit),
+		C.bool(withHighlights),
+		&errBuffer,
+	)
+	if ptr == nil {
+		defer C.string_free(errBuffer)
+		return nil, errors.New(C.GoString(errBuffer))
+	}
+
+	return &SearchResult{ptr: ptr}, nil
+}
+
 // Close waits till the merging operations are finished and releases all the resources held by the indexWriter
 func (tc *TantivyContext) Close() error {
 	ptr := tc.ptr

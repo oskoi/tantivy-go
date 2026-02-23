@@ -19,6 +19,37 @@ We've been running it in [Anytype](https://github.com/anyproto/anytype-heart) fo
 ### Golang API to Create Custom Queries for Tantivy
 See `searchquerybuilder.go`
 
+### Numeric Field Support
+Supports u64, i64, and f64 field types with indexing and fast field support:
+```go
+builder.AddU64Field("price", true, true, true)  // stored, fast, indexed
+builder.AddI64Field("temperature", true, true, true)
+builder.AddF64Field("score", true, true, true)
+```
+
+### Range Queries
+Supports range queries using tantivy's query parser syntax:
+```go
+// Inclusive range: price between 10 and 100
+result, err := tc.SearchQueryParser("price:[10 TO 100]", 10, false)
+
+// Exclusive range: price > 10 and price < 100
+result, err := tc.SearchQueryParser("price:{10 TO 100}", 10, false)
+
+// Unbounded range: price >= 50
+result, err := tc.SearchQueryParser("price:[50 TO *]", 10, false)
+
+// Combined with text search
+result, err := tc.SearchQueryParser("title:Product AND price:[20 TO 150]", 10, false)
+```
+
+**Query Parser Syntax:**
+- `[lower TO upper]` - Inclusive range (includes bounds)
+- `{lower TO upper}` - Exclusive range (excludes bounds)
+- `*` - Unbounded (e.g., `[50 TO *]` means >= 50)
+- Supports numeric and text ranges
+- Can be combined with boolean operators (AND, OR, NOT)
+
 ## Search quality testing
 [Test quality](testquality/README.md)
 
