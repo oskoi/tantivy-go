@@ -4,7 +4,6 @@ package tantivy_go
 import "C"
 import (
 	"errors"
-	"fmt"
 )
 
 type SearchResult struct{ ptr *C.SearchResult }
@@ -43,7 +42,7 @@ func (r *SearchResult) GetSize() (uint64, error) {
 	if errorMessage == "" {
 		return uint64(size), nil
 	} else {
-		return uint64(0), fmt.Errorf(errorMessage)
+		return uint64(0), errors.New(errorMessage)
 	}
 }
 

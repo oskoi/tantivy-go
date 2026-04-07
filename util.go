@@ -2,7 +2,7 @@ package tantivy_go
 
 // #include "bindings.h"
 import "C"
-import "fmt"
+import "errors"
 
 func tryExtractError(errBuffer *C.char) error {
 	errorMessage := C.GoString(errBuffer)
@@ -11,6 +11,6 @@ func tryExtractError(errBuffer *C.char) error {
 	if errorMessage == "" {
 		return nil
 	} else {
-		return fmt.Errorf(errorMessage)
+		return errors.New(errorMessage)
 	}
 }

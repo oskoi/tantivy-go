@@ -8,17 +8,17 @@ build = "src/build.rs"
 crate-type = ["staticlib"]
 
 [build-dependencies]
-cbindgen = "0.28.0"
+cbindgen = "0.29.2"
 
 [dependencies]
 tantivy = { git = "https://github.com/quickwit-oss/tantivy.git", rev = "9e63fc508153ef770f9ff980c8fa2f11e8e2e6db" }
-cbindgen = "0.28.0"
-log = "0.4.26"
-env_logger = "0.11.6"
-serde_json = "1.0.139"
-serde = { version = "1.0.218", features = ["derive"] }
-unicode-segmentation = "1.12.0"
-logcall = "0.1.11"
+cbindgen = "0.29.2"
+log = "0.4.29"
+env_logger = "0.11.10"
+serde_json = "1.0.149"
+serde = { version = "1.0.228", features = ["derive"] }
+unicode-segmentation = "1.13.2"
+logcall = "0.1.13"
 lazy_static = "1.5.0"
 phf = { version = "0.11.2", features = ["macros"] }
 crunchy = "=0.2.2" #https://github.com/eira-fransham/crunchy/issues/13

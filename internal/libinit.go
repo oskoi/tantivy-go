@@ -2,7 +2,10 @@ package internal
 
 //#include "../bindings.h"
 import "C"
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // LibInit for tests init
 func LibInit(cleanOnPanic, utf8Lenient bool, directive ...string) error {
@@ -25,7 +28,7 @@ func LibInit(cleanOnPanic, utf8Lenient bool, directive ...string) error {
 	defer C.string_free(errBuffer)
 
 	if errorMessage != "" {
-		return fmt.Errorf(errorMessage)
+		return errors.New(errorMessage)
 	}
 	return nil
 }
