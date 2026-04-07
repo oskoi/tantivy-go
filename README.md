@@ -54,6 +54,9 @@ result, err := tc.SearchQueryParser("price:[50 TO *]", 10, false)
 
 // Combined with text search
 result, err := tc.SearchQueryParser("title:Product AND price:[20 TO 150]", 10, false)
+
+// Optional: enable regex syntax in query parser
+result, err := tc.SearchQueryParser("title:/prod.*/", 10, false, tantivy_go.WithRegexesEnabled())
 ```
 
 **Query Parser Syntax:**

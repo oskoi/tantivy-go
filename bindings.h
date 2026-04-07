@@ -53,6 +53,13 @@ uint32_t schema_builder_add_date_field(SchemaBuilder *builder_ptr,
                                        bool is_indexed,
                                        char **error_buffer);
 
+uint32_t schema_builder_add_bytes_field(SchemaBuilder *builder_ptr,
+                                        const char *field_name_ptr,
+                                        bool stored,
+                                        bool is_fast,
+                                        bool is_indexed,
+                                        char **error_buffer);
+
 struct TantivyContext *context_create_with_schema(const char *path_ptr,
                                                   Schema *schema_ptr,
                                                   char **error_buffer);
@@ -157,6 +164,7 @@ struct SearchResult *context_search_query_parser(struct TantivyContext *context_
                                                  const char *query_ptr,
                                                  uintptr_t docs_limit,
                                                  bool with_highlights,
+                                                 bool allow_regexes,
                                                  char **error_buffer);
 
 void context_free(struct TantivyContext *context_ptr);
@@ -201,6 +209,12 @@ void document_add_date_field(struct Document *doc_ptr,
                              unsigned int field_id,
                              int64_t timestamp_millis,
                              char **error_buffer);
+
+void document_add_bytes_field(struct Document *doc_ptr,
+                              unsigned int field_id,
+                              const char *field_value_ptr,
+                              uintptr_t field_value_len,
+                              char **error_buffer);
 
 char *document_as_json(struct Document *doc_ptr,
                        unsigned int *include_field_ids_ptr,

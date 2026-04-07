@@ -1,6 +1,6 @@
 use tantivy::schema::{
-    DateOptions, IndexRecordOption, NumericOptions, SchemaBuilder, TextFieldIndexing, FAST, STORED,
-    STRING, TEXT,
+    BytesOptions, DateOptions, IndexRecordOption, NumericOptions, SchemaBuilder, TextFieldIndexing,
+    FAST, STORED, STRING, TEXT,
 };
 
 pub fn add_text_field(
@@ -101,4 +101,29 @@ pub fn add_schema_date_field(
 ) -> u32 {
     let options = date_field_options(stored, is_fast, is_indexed);
     builder.add_date_field(field_name, options).field_id()
+}
+
+fn bytes_field_options(stored: bool, is_fast: bool, is_indexed: bool) -> BytesOptions {
+    let mut options = BytesOptions::default();
+    if stored {
+        options = options.set_stored();
+    }
+    if is_fast {
+        options = options.set_fast();
+    }
+    if is_indexed {
+        options = options.set_indexed();
+    }
+    options
+}
+
+pub fn add_schema_bytes_field(
+    stored: bool,
+    is_fast: bool,
+    is_indexed: bool,
+    builder: &mut SchemaBuilder,
+    field_name: &str,
+) -> u32 {
+    let options = bytes_field_options(stored, is_fast, is_indexed);
+    builder.add_bytes_field(field_name, options).field_id()
 }

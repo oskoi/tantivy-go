@@ -1,6 +1,7 @@
 mod util;
 
 pub use self::util::add_and_consume_documents;
+pub use self::util::add_bytes_field;
 pub use self::util::add_date_field;
 pub use self::util::add_f64_field;
 pub use self::util::add_field;

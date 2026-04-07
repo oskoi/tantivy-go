@@ -340,6 +340,16 @@ pub fn add_date_field<'a>(
     Ok(())
 }
 
+pub fn add_bytes_field<'a>(
+    doc: &mut Document,
+    field_id: u32,
+    field_value: &[u8],
+) -> Result<(), TantivyGoError> {
+    doc.tantivy_doc
+        .add_bytes(Field::from_field_id(field_id), field_value);
+    Ok(())
+}
+
 fn perform_search<F>(
     query_parser_fn: F,
     docs_limit: usize,
@@ -355,7 +365,10 @@ where
     let query = query_parser_fn(&context.index).map_err(|err| TantivyGoError(err))?;
 
     let top_docs = searcher
-        .search(&query, &tantivy::collector::TopDocs::with_limit(docs_limit))
+        .search(
+            &query,
+            &tantivy::collector::TopDocs::with_limit(docs_limit).order_by_score(),
+        )
         .map_err(|err| TantivyGoError::from_err("Search err", &err.to_string()))?;
 
     let mut documents = Vec::new();
@@ -443,6 +456,7 @@ pub fn search_query_parser(
     docs_limit: usize,
     context: &mut TantivyContext,
     with_highlights: bool,
+    allow_regexes: bool,
 ) -> Result<*mut SearchResult, TantivyGoError> {
     let query_str = assert_string(query_ptr)?;
 
@@ -453,6 +467,9 @@ pub fn search_query_parser(
     }
 
     let mut query_parser = QueryParser::for_index(&context.index, fields);
+    if allow_regexes {
+        query_parser.allow_regexes();
+    }
     let query = query_parser
         .parse_query(&query_str)
         .map_err(|e| TantivyGoError(e.to_string()))?;
@@ -497,7 +514,10 @@ pub fn search_fast_field(
         .map_err(|e| TantivyGoError(e.to_string()))?;
 
     let top_docs = searcher
-        .search(&query, &tantivy::collector::TopDocs::with_limit(docs_limit))
+        .search(
+            &query,
+            &tantivy::collector::TopDocs::with_limit(docs_limit).order_by_score(),
+        )
         .map_err(|err| TantivyGoError::from_err("Search err", &err.to_string()))?;
 
     if top_docs.is_empty() {
@@ -534,7 +554,10 @@ pub fn search_fast_field_json(
         .map_err(|e| TantivyGoError(e.to_string()))?;
 
     let top_docs = searcher
-        .search(&query, &tantivy::collector::TopDocs::with_limit(docs_limit))
+        .search(
+            &query,
+            &tantivy::collector::TopDocs::with_limit(docs_limit).order_by_score(),
+        )
         .map_err(|err| TantivyGoError::from_err("Search err", &err.to_string()))?;
 
     if top_docs.is_empty() {

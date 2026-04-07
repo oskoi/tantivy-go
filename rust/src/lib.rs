@@ -6,14 +6,15 @@ use tantivy::schema::*;
 use tantivy::{Opstamp, Term};
 
 use crate::c_util::{
-    add_and_consume_documents, add_date_field, add_f64_field, add_field, add_fields, add_i64_field,
-    add_u64_field, assert_pointer, assert_str, assert_string, box_from, convert_document_as_json,
-    create_context_with_schema, delete_docs, drop_any, get_doc, search, search_fast_field,
-    search_fast_field_json, search_json, search_query_parser, set_error, start_lib_init,
+    add_and_consume_documents, add_bytes_field, add_date_field, add_f64_field, add_field,
+    add_fields, add_i64_field, add_u64_field, assert_pointer, assert_str, assert_string, box_from,
+    convert_document_as_json, create_context_with_schema, delete_docs, drop_any, get_doc, search,
+    search_fast_field, search_fast_field_json, search_json, search_query_parser, set_error,
+    start_lib_init,
 };
 use crate::tantivy_util::{
-    add_schema_date_field, add_schema_f64_field, add_schema_i64_field, add_schema_u64_field,
-    add_text_field, register_edge_ngram_tokenizer, register_ngram_tokenizer,
+    add_schema_bytes_field, add_schema_date_field, add_schema_f64_field, add_schema_i64_field,
+    add_schema_u64_field, add_text_field, register_edge_ngram_tokenizer, register_ngram_tokenizer,
     register_raw_tokenizer, register_simple_tokenizer, Document, SearchResult, TantivyContext,
     TantivyGoError,
 };
@@ -201,6 +202,37 @@ pub extern "C" fn schema_builder_add_date_field(
         let builder = assert_pointer(builder_ptr)?;
         let field_name = assert_string(field_name_ptr)?;
         Ok(add_schema_date_field(
+            stored,
+            is_fast,
+            is_indexed,
+            builder,
+            field_name.as_str(),
+        ))
+    };
+
+    match result() {
+        Ok(val) => val,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn schema_builder_add_bytes_field(
+    builder_ptr: *mut SchemaBuilder,
+    field_name_ptr: *const c_char,
+    stored: bool,
+    is_fast: bool,
+    is_indexed: bool,
+    error_buffer: *mut *mut c_char,
+) -> u32 {
+    let result = || -> Result<u32, TantivyGoError> {
+        let builder = assert_pointer(builder_ptr)?;
+        let field_name = assert_string(field_name_ptr)?;
+        Ok(add_schema_bytes_field(
             stored,
             is_fast,
             is_indexed,
@@ -673,11 +705,18 @@ pub extern "C" fn context_search_query_parser(
     query_ptr: *const c_char,
     docs_limit: usize,
     with_highlights: bool,
+    allow_regexes: bool,
     error_buffer: *mut *mut c_char,
 ) -> *mut SearchResult {
     let result = || -> Result<*mut SearchResult, TantivyGoError> {
         let context = assert_pointer(context_ptr)?;
-        search_query_parser(query_ptr, docs_limit, context, with_highlights)
+        search_query_parser(
+            query_ptr,
+            docs_limit,
+            context,
+            with_highlights,
+            allow_regexes,
+        )
     };
 
     match result() {
@@ -876,6 +915,36 @@ pub extern "C" fn document_add_date_field(
     let result = || -> Result<(), TantivyGoError> {
         let doc = assert_pointer(doc_ptr)?;
         add_date_field(doc, field_id, timestamp_millis)
+    };
+
+    match result() {
+        Ok(_) => {}
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn document_add_bytes_field(
+    doc_ptr: *mut Document,
+    field_id: c_uint,
+    field_value_ptr: *const c_char,
+    field_value_len: usize,
+    error_buffer: *mut *mut c_char,
+) {
+    let result = || -> Result<(), TantivyGoError> {
+        let doc = assert_pointer(doc_ptr)?;
+        if field_value_ptr.is_null() && field_value_len > 0 {
+            return Err(TantivyGoError("Pointer is null".to_string()));
+        }
+        let field_value: &[u8] = if field_value_len == 0 {
+            &[]
+        } else {
+            unsafe { std::slice::from_raw_parts(field_value_ptr as *const u8, field_value_len) }
+        };
+        add_bytes_field(doc, field_id, field_value)
     };
 
     match result() {

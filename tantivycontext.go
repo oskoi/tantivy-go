@@ -15,6 +15,20 @@ type TantivyContext struct {
 	lock   sync.Mutex // tantivy writer commits should be executed exclusively
 }
 
+type queryParserConfig struct {
+	allowRegexes bool
+}
+
+// QueryParserOption configures SearchQueryParser behavior.
+type QueryParserOption func(*queryParserConfig)
+
+// WithRegexesEnabled allows regex syntax in query parser expressions.
+func WithRegexesEnabled() QueryParserOption {
+	return func(cfg *queryParserConfig) {
+		cfg.allowRegexes = true
+	}
+}
+
 // NewTantivyContextWithSchema creates a new instance of TantivyContext with the provided schema.
 //
 // Parameters:
@@ -316,17 +330,25 @@ func (tc *TantivyContext) SearchJson(sCtx SearchContext) (*SearchResult, error) 
 }
 
 // SearchQueryParser performs a search using tantivy's query parser syntax.
-// Supports range queries (e.g., "price:[10 TO 100]"), fuzzy queries, wildcards, etc.
+// Supports range queries (e.g., "price:[10 TO 100]"), fuzzy queries, and wildcards.
 //
 // Parameters:
 //   - query: The query string in tantivy query parser syntax
 //   - docsLimit: Maximum number of documents to return
 //   - withHighlights: Whether to include highlighted snippets
+//   - opts: Optional parser configuration options (e.g., WithRegexesEnabled)
 //
 // Returns:
 //   - *SearchResult: A pointer to the SearchResult containing the search results.
 //   - error: An error if the search fails.
-func (tc *TantivyContext) SearchQueryParser(query string, docsLimit int, withHighlights bool) (*SearchResult, error) {
+func (tc *TantivyContext) SearchQueryParser(query string, docsLimit int, withHighlights bool, opts ...QueryParserOption) (*SearchResult, error) {
+	cfg := queryParserConfig{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+
 	cQuery := C.CString(query)
 	defer C.string_free(cQuery)
 
@@ -336,6 +358,7 @@ func (tc *TantivyContext) SearchQueryParser(query string, docsLimit int, withHig
 		cQuery,
 		pointerCType(docsLimit),
 		C.bool(withHighlights),
+		C.bool(cfg.allowRegexes),
 		&errBuffer,
 	)
 	if ptr == nil {

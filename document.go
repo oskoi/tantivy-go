@@ -113,6 +113,23 @@ func (d *Document) AddDateField(timestampMillis int64, tc *TantivyContext, field
 	return tryExtractError(errBuffer)
 }
 
+// AddBytesField adds a bytes field to the document.
+func (d *Document) AddBytesField(value []byte, tc *TantivyContext, fieldName string) error {
+	fieldId, contains := tc.schema.fieldNames[fieldName]
+	if !contains {
+		return errors.New("field not found in schema")
+	}
+
+	var ptr *C.char
+	if len(value) > 0 {
+		ptr = (*C.char)(unsafe.Pointer(&value[0]))
+	}
+
+	var errBuffer *C.char
+	C.document_add_bytes_field(d.ptr, C.uint(fieldId), ptr, C.uintptr_t(len(value)), &errBuffer)
+	return tryExtractError(errBuffer)
+}
+
 // ToJson converts the document to its JSON representation based on the provided schema.
 // Optionally, specific fields can be included in the JSON output.
 //
