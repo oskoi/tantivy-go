@@ -130,6 +130,21 @@ func (d *Document) AddBytesField(value []byte, tc *TantivyContext, fieldName str
 	return tryExtractError(errBuffer)
 }
 
+// AddJSONField adds a JSON object value to a JSON field in the document.
+func (d *Document) AddJSONField(value string, tc *TantivyContext, fieldName string) error {
+	fieldId, contains := tc.schema.fieldNames[fieldName]
+	if !contains {
+		return errors.New("field not found in schema")
+	}
+
+	cValue := C.CString(value)
+	d.toFree = append(d.toFree, func() { C.string_free(cValue) })
+
+	var errBuffer *C.char
+	C.document_add_json_field(d.ptr, C.uint(fieldId), cValue, &errBuffer)
+	return tryExtractError(errBuffer)
+}
+
 // ToJson converts the document to its JSON representation based on the provided schema.
 // Optionally, specific fields can be included in the JSON output.
 //

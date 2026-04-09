@@ -350,6 +350,19 @@ pub fn add_bytes_field<'a>(
     Ok(())
 }
 
+pub fn add_json_field<'a>(
+    doc: &mut Document,
+    field_id: u32,
+    field_value: &str,
+) -> Result<(), TantivyGoError> {
+    let parsed: serde_json::Value = serde_json::from_str(field_value)
+        .map_err(|e| TantivyGoError::from_err("Invalid JSON value", &e.to_string()))?;
+    let owned_value: tantivy::schema::OwnedValue = parsed.into();
+    doc.tantivy_doc
+        .add_field_value(Field::from_field_id(field_id), &owned_value);
+    Ok(())
+}
+
 fn perform_search<F>(
     query_parser_fn: F,
     docs_limit: usize,

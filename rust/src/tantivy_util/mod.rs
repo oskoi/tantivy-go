@@ -21,6 +21,7 @@ pub use self::scheme_builder::add_schema_bytes_field;
 pub use self::scheme_builder::add_schema_date_field;
 pub use self::scheme_builder::add_schema_f64_field;
 pub use self::scheme_builder::add_schema_i64_field;
+pub use self::scheme_builder::add_schema_json_field;
 pub use self::scheme_builder::add_schema_u64_field;
 pub use self::scheme_builder::add_text_field;
 pub use self::tokenizer::register_edge_ngram_tokenizer;

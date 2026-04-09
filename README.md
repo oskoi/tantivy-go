@@ -40,6 +40,26 @@ doc.AddDateField(time.Now().UnixMilli(), tc, "created_at")
 result, err := tc.SearchQueryParser("created_at:[2024-01-01T00:00:00Z TO 2024-12-31T23:59:59Z]", 10, false)
 ```
 
+### JSON Field Support
+Supports native Tantivy JSON object fields with full options:
+```go
+jsonOpts := tantivy_go.NewJSONFieldOptions()
+jsonOpts.Stored = true
+jsonOpts.IsIndexed = true
+jsonOpts.IsFast = true
+jsonOpts.IndexTokenizer = tantivy_go.DefaultTokenizer
+jsonOpts.FastTokenizer = tantivy_go.DefaultTokenizer
+jsonOpts.ExpandDotsEnabled = true
+
+err := builder.AddJSONField("payload", jsonOpts)
+
+doc := tantivy_go.NewDocument()
+_ = doc.AddJSONField(`{"meta":{"author":"alice"},"k8s.node.id":5}`, tc, "payload")
+
+result, err := tc.SearchQueryParser("payload.meta.author:alice", 10, false)
+result, err = tc.SearchQueryParser("payload.k8s.node.id:5", 10, false)
+```
+
 ### Range Queries
 Supports range queries using tantivy's query parser syntax:
 ```go

@@ -15,6 +15,15 @@ type (
 		ptr        *C.Schema
 		fieldNames map[string]int
 	}
+	JSONFieldOptions struct {
+		Stored            bool
+		IsFast            bool
+		IsIndexed         bool
+		IndexRecordOption int
+		IndexTokenizer    string
+		FastTokenizer     string
+		ExpandDotsEnabled bool
+	}
 )
 
 const (
@@ -27,6 +36,13 @@ const (
 )
 
 const DefaultTokenizer = "default"
+
+func NewJSONFieldOptions() JSONFieldOptions {
+	return JSONFieldOptions{
+		IndexRecordOption: IndexRecordOptionWithFreqsAndPositions,
+		IndexTokenizer:    DefaultTokenizer,
+	}
+}
 
 type Language string
 
@@ -251,6 +267,45 @@ func (b *SchemaBuilder) AddBytesField(name string, stored bool, isFast bool, isI
 		C._Bool(stored),
 		C._Bool(isFast),
 		C._Bool(isIndexed),
+		&errBuffer,
+	)
+	b.fieldNames[name] = int(fieldId)
+	return tryExtractError(errBuffer)
+}
+
+// AddJSONField adds a JSON object field to the schema.
+func (b *SchemaBuilder) AddJSONField(name string, opts JSONFieldOptions) error {
+	if _, contains := b.fieldNames[name]; contains {
+		return errors.New("field already defined: " + name)
+	}
+
+	if opts.IndexTokenizer == "" {
+		opts.IndexTokenizer = DefaultTokenizer
+	}
+
+	b.fieldNames[name] = -1
+	cName := C.CString(name)
+	defer C.string_free(cName)
+	cIndexTokenizer := C.CString(opts.IndexTokenizer)
+	defer C.string_free(cIndexTokenizer)
+
+	var cFastTokenizer *C.char
+	if opts.FastTokenizer != "" {
+		cFastTokenizer = C.CString(opts.FastTokenizer)
+		defer C.string_free(cFastTokenizer)
+	}
+
+	var errBuffer *C.char
+	fieldId := C.schema_builder_add_json_field(
+		b.ptr,
+		cName,
+		C._Bool(opts.Stored),
+		C._Bool(opts.IsFast),
+		C._Bool(opts.IsIndexed),
+		pointerCType(opts.IndexRecordOption),
+		cIndexTokenizer,
+		cFastTokenizer,
+		C._Bool(opts.ExpandDotsEnabled),
 		&errBuffer,
 	)
 	b.fieldNames[name] = int(fieldId)

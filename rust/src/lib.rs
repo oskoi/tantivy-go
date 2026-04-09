@@ -7,16 +7,16 @@ use tantivy::{Opstamp, Term};
 
 use crate::c_util::{
     add_and_consume_documents, add_bytes_field, add_date_field, add_f64_field, add_field,
-    add_fields, add_i64_field, add_u64_field, assert_pointer, assert_str, assert_string, box_from,
-    convert_document_as_json, create_context_with_schema, delete_docs, drop_any, get_doc, search,
-    search_fast_field, search_fast_field_json, search_json, search_query_parser, set_error,
-    start_lib_init,
+    add_fields, add_i64_field, add_json_field, add_u64_field, assert_pointer, assert_str,
+    assert_string, box_from, convert_document_as_json, create_context_with_schema, delete_docs,
+    drop_any, get_doc, search, search_fast_field, search_fast_field_json, search_json,
+    search_query_parser, set_error, start_lib_init,
 };
 use crate::tantivy_util::{
     add_schema_bytes_field, add_schema_date_field, add_schema_f64_field, add_schema_i64_field,
-    add_schema_u64_field, add_text_field, register_edge_ngram_tokenizer, register_ngram_tokenizer,
-    register_raw_tokenizer, register_simple_tokenizer, Document, SearchResult, TantivyContext,
-    TantivyGoError,
+    add_schema_json_field, add_schema_u64_field, add_text_field, register_edge_ngram_tokenizer,
+    register_ngram_tokenizer, register_raw_tokenizer, register_simple_tokenizer, Document,
+    SearchResult, TantivyContext, TantivyGoError,
 };
 
 mod c_util;
@@ -238,6 +238,62 @@ pub extern "C" fn schema_builder_add_bytes_field(
             is_indexed,
             builder,
             field_name.as_str(),
+        ))
+    };
+
+    match result() {
+        Ok(val) => val,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn schema_builder_add_json_field(
+    builder_ptr: *mut SchemaBuilder,
+    field_name_ptr: *const c_char,
+    stored: bool,
+    is_fast: bool,
+    is_indexed: bool,
+    index_record_option_const: usize,
+    index_tokenizer_name_ptr: *const c_char,
+    fast_tokenizer_name_ptr: *const c_char,
+    expand_dots_enabled: bool,
+    error_buffer: *mut *mut c_char,
+) -> u32 {
+    let result = || -> Result<u32, TantivyGoError> {
+        let builder = assert_pointer(builder_ptr)?;
+        let field_name = assert_string(field_name_ptr)?;
+        let index_tokenizer_name = assert_string(index_tokenizer_name_ptr)?;
+        let fast_tokenizer_name = if fast_tokenizer_name_ptr.is_null() {
+            None
+        } else {
+            Some(assert_string(fast_tokenizer_name_ptr)?)
+        };
+        let index_record_option = match index_record_option_const {
+            0 => IndexRecordOption::Basic,
+            1 => IndexRecordOption::WithFreqs,
+            2 => IndexRecordOption::WithFreqsAndPositions,
+            _ => {
+                return Err(TantivyGoError(
+                    "Invalid index_record_option_const".to_string(),
+                ))
+            }
+        };
+
+        Ok(add_schema_json_field(
+            stored,
+            is_fast,
+            is_indexed,
+            builder,
+            field_name.as_str(),
+            index_tokenizer_name.as_str(),
+            fast_tokenizer_name.as_deref(),
+            index_record_option,
+            expand_dots_enabled,
         ))
     };
 
@@ -945,6 +1001,28 @@ pub extern "C" fn document_add_bytes_field(
             unsafe { std::slice::from_raw_parts(field_value_ptr as *const u8, field_value_len) }
         };
         add_bytes_field(doc, field_id, field_value)
+    };
+
+    match result() {
+        Ok(_) => {}
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn document_add_json_field(
+    doc_ptr: *mut Document,
+    field_id: c_uint,
+    field_value_ptr: *const c_char,
+    error_buffer: *mut *mut c_char,
+) {
+    let result = || -> Result<(), TantivyGoError> {
+        let doc = assert_pointer(doc_ptr)?;
+        let field_value = assert_str(field_value_ptr)?;
+        add_json_field(doc, field_id, &field_value)
     };
 
     match result() {

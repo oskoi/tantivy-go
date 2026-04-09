@@ -1,6 +1,6 @@
 use tantivy::schema::{
-    BytesOptions, DateOptions, IndexRecordOption, NumericOptions, SchemaBuilder, TextFieldIndexing,
-    FAST, STORED, STRING, TEXT,
+    BytesOptions, DateOptions, IndexRecordOption, JsonObjectOptions, NumericOptions, SchemaBuilder,
+    TextFieldIndexing, FAST, STORED, STRING, TEXT,
 };
 
 pub fn add_text_field(
@@ -126,4 +126,36 @@ pub fn add_schema_bytes_field(
 ) -> u32 {
     let options = bytes_field_options(stored, is_fast, is_indexed);
     builder.add_bytes_field(field_name, options).field_id()
+}
+
+pub fn add_schema_json_field(
+    stored: bool,
+    is_fast: bool,
+    is_indexed: bool,
+    builder: &mut SchemaBuilder,
+    field_name: &str,
+    index_tokenizer_name: &str,
+    fast_tokenizer_name: Option<&str>,
+    index_record_option: IndexRecordOption,
+    expand_dots_enabled: bool,
+) -> u32 {
+    let mut options = JsonObjectOptions::default();
+    if stored {
+        options = options.set_stored();
+    }
+    if is_fast {
+        options = options.set_fast(fast_tokenizer_name);
+    }
+    if is_indexed {
+        options = options.set_indexing_options(
+            TextFieldIndexing::default()
+                .set_tokenizer(index_tokenizer_name)
+                .set_index_option(index_record_option),
+        );
+    }
+    if expand_dots_enabled {
+        options = options.set_expand_dots_enabled();
+    }
+
+    builder.add_json_field(field_name, options).field_id()
 }

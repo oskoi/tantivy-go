@@ -33,7 +33,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     match cbindgen::Builder::new()
         .with_crate(crate_dir)
         .with_config(config)
-        .generate() {
+        .generate()
+    {
         Ok(bindings) => bindings.write_to_file(FILE_PATH),
         Err(e) => return Err(Box::new(e)),
     };
