@@ -47,5 +47,9 @@ func (r *SearchResult) GetSize() (uint64, error) {
 }
 
 func (r *SearchResult) Free() {
+	if r == nil || r.ptr == nil {
+		return
+	}
 	C.search_result_free(r.ptr)
+	r.ptr = nil
 }

@@ -11,7 +11,7 @@ crate-type = ["staticlib"]
 cbindgen = "0.29.2"
 
 [dependencies]
-tantivy = { git = "https://github.com/quickwit-oss/tantivy.git", rev = "9e63fc508153ef770f9ff980c8fa2f11e8e2e6db" }
+tantivy = { git = "https://github.com/quickwit-oss/tantivy.git", rev = "d8f4c0b703120ed98f06297724dc1522df6019b9" }
 cbindgen = "0.29.2"
 log = "0.4.29"
 env_logger = "0.11.10"

@@ -1,14 +1,14 @@
 use serde::Deserialize;
-use serde_json::Deserializer;
 use std::error::Error;
+use std::fs;
 use std::fs::File;
-use std::io::{BufReader, Seek};
+use std::io::BufReader;
 use std::path::Path;
-use std::{fs, io};
-use tantivy::collector::TopDocs;
-use tantivy::query::{PhrasePrefixQuery, QueryParser};
+use tantivy::tokenizer::{
+    AsciiFoldingFilter, Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer,
+    TextAnalyzer,
+};
 use tantivy::{schema::*, Index};
-use tantivy::tokenizer::{AsciiFoldingFilter, Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, TextAnalyzer};
 
 #[derive(Debug, Deserialize)]
 struct DocumentData {
@@ -17,21 +17,11 @@ struct DocumentData {
     body: String,
 }
 
-#[derive(Deserialize)]
-struct Query {
-    query: String,
-    relevant_docs: Vec<String>,
-}
-
 fn register_tokenizer(index: &Index, tokenizer_name: &str, text_analyzer: TextAnalyzer) {
     index.tokenizers().register(tokenizer_name, text_analyzer)
 }
 
-pub fn register_simple_tokenizer(
-    text_limit: usize,
-    index: &Index,
-    tokenizer_name: &str,
-) {
+pub fn register_simple_tokenizer(text_limit: usize, index: &Index, tokenizer_name: &str) {
     let text_analyzer = TextAnalyzer::builder(SimpleTokenizer::default())
         .filter(RemoveLongFilter::limit(text_limit))
         .filter(LowerCaser)
@@ -52,12 +42,20 @@ pub fn add_text_field(
     index_record_option: IndexRecordOption,
 ) -> Field {
     let mut text_options = if is_text { TEXT } else { STRING };
-    text_options = if stored { text_options | STORED } else { text_options };
-    text_options = if is_fast { text_options | FAST } else { text_options };
+    text_options = if stored {
+        text_options | STORED
+    } else {
+        text_options
+    };
+    text_options = if is_fast {
+        text_options | FAST
+    } else {
+        text_options
+    };
     text_options = text_options.set_indexing_options(
         TextFieldIndexing::default()
             .set_tokenizer(tokenizer_name)
-            .set_index_option(index_record_option)
+            .set_index_option(index_record_option),
     );
     builder.add_text_field(field_name, text_options)
 }
@@ -78,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &mut schema_builder,
         "simple_tokenizer",
         "title",
-        IndexRecordOption::WithFreqsAndPositions
+        IndexRecordOption::WithFreqsAndPositions,
     );
 
     let body_field = add_text_field(
@@ -88,7 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &mut schema_builder,
         "simple_tokenizer",
         "body",
-        IndexRecordOption::WithFreqsAndPositions
+        IndexRecordOption::WithFreqsAndPositions,
     );
 
     let id_field = add_text_field(
@@ -98,12 +96,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         &mut schema_builder,
         "simple_tokenizer",
         "id",
-        IndexRecordOption::WithFreqsAndPositions
+        IndexRecordOption::WithFreqsAndPositions,
     );
 
     let schema = schema_builder.build();
 
-    let index = if Path::new(index_dir).read_dir()?.next().is_none() {
+    let _index = if Path::new(index_dir).read_dir()?.next().is_none() {
         let index = Index::create_in_dir(index_dir, schema.clone())?;
         register_simple_tokenizer(40, &index, "simple_tokenizer");
 
@@ -118,7 +116,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             doc.add_text(title_field, &doc_data.title);
             doc.add_text(body_field, &doc_data.body);
             doc.add_text(id_field, &doc_data.id);
-            index_writer.add_document(doc);
+            index_writer.add_document(doc)?;
         }
 
         index_writer.commit()?;
