@@ -8,8 +8,8 @@ import (
 )
 
 type Document struct {
-	ptr    *C.Document
-	toFree []func()
+	ptr      *C.Document
+	consumed bool
 }
 
 // NewDocument creates a new instance of Document.
@@ -19,6 +19,37 @@ type Document struct {
 func NewDocument() *Document {
 	ptr := C.document_create()
 	return &Document{ptr: ptr}
+}
+
+func (d *Document) ensureOpen() error {
+	if d == nil || d.ptr == nil {
+		if d != nil && d.consumed {
+			return ErrConsumedDocument
+		}
+		return ErrClosedDocument
+	}
+	if d.consumed {
+		return ErrConsumedDocument
+	}
+	return nil
+}
+
+func (d *Document) markConsumed() {
+	if d != nil {
+		d.ptr = nil
+		d.consumed = true
+	}
+}
+
+func fieldIDFromContext(tc *TantivyContext, fieldName string) (int, error) {
+	if tc == nil || tc.schema == nil {
+		return 0, ErrClosedContext
+	}
+	fieldID, contains := tc.schema.fieldNames[fieldName]
+	if !contains {
+		return 0, errors.New("field not found in schema")
+	}
+	return fieldID, nil
 }
 
 // AddField adds a field with the specified name and value to the document using the given index.
@@ -32,15 +63,19 @@ func NewDocument() *Document {
 // Returns:
 //   - error: an error if adding the field fails, or nil if the operation is successful
 func (d *Document) AddField(fieldValue string, tc *TantivyContext, fieldName string) error {
-	fieldId, contains := tc.schema.fieldNames[fieldName]
-	if !contains {
-		return errors.New("field not found in schema")
+	if err := d.ensureOpen(); err != nil {
+		return err
 	}
-	cFieldValue := C.CString(fieldValue)
-	d.toFree = append(d.toFree, func() { C.string_free(cFieldValue) })
-	var errBuffer *C.char
-	C.document_add_field(d.ptr, C.uint(fieldId), cFieldValue, &errBuffer)
+	fieldID, err := fieldIDFromContext(tc, fieldName)
+	if err != nil {
+		return err
+	}
 
+	cFieldValue, freeFieldValue := newCString(fieldValue)
+	defer freeFieldValue()
+
+	var errBuffer *C.char
+	C.document_add_field(d.ptr, C.uint(fieldID), cFieldValue, &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
@@ -55,69 +90,87 @@ func (d *Document) AddField(fieldValue string, tc *TantivyContext, fieldName str
 // Returns:
 //   - error: an error if adding the field fails, or nil if the operation is successful
 func (d *Document) AddFields(fieldValue string, tc *TantivyContext, fieldNames ...string) error {
+	if err := d.ensureOpen(); err != nil {
+		return err
+	}
 	includeFieldsPtr, err := tc.extractFields(fieldNames)
 	if err != nil {
 		return err
 	}
 
-	cFieldValue := C.CString(fieldValue)
-	d.toFree = append(d.toFree, func() { C.string_free(cFieldValue) })
+	cFieldValue, freeFieldValue := newCString(fieldValue)
+	defer freeFieldValue()
+
 	var errBuffer *C.char
 	C.document_add_fields(d.ptr, (*C.uint)(unsafe.Pointer(&includeFieldsPtr[0])), C.uintptr_t(len(includeFieldsPtr)), cFieldValue, &errBuffer)
-
 	return tryExtractError(errBuffer)
 }
 
 // AddU64Field adds an unsigned 64-bit integer field to the document.
 func (d *Document) AddU64Field(value uint64, tc *TantivyContext, fieldName string) error {
-	fieldId, contains := tc.schema.fieldNames[fieldName]
-	if !contains {
-		return errors.New("field not found in schema")
+	if err := d.ensureOpen(); err != nil {
+		return err
+	}
+	fieldID, err := fieldIDFromContext(tc, fieldName)
+	if err != nil {
+		return err
 	}
 	var errBuffer *C.char
-	C.document_add_u64_field(d.ptr, C.uint(fieldId), C.uint64_t(value), &errBuffer)
+	C.document_add_u64_field(d.ptr, C.uint(fieldID), C.uint64_t(value), &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
 // AddI64Field adds a signed 64-bit integer field to the document.
 func (d *Document) AddI64Field(value int64, tc *TantivyContext, fieldName string) error {
-	fieldId, contains := tc.schema.fieldNames[fieldName]
-	if !contains {
-		return errors.New("field not found in schema")
+	if err := d.ensureOpen(); err != nil {
+		return err
+	}
+	fieldID, err := fieldIDFromContext(tc, fieldName)
+	if err != nil {
+		return err
 	}
 	var errBuffer *C.char
-	C.document_add_i64_field(d.ptr, C.uint(fieldId), C.int64_t(value), &errBuffer)
+	C.document_add_i64_field(d.ptr, C.uint(fieldID), C.int64_t(value), &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
 // AddF64Field adds a 64-bit floating point field to the document.
 func (d *Document) AddF64Field(value float64, tc *TantivyContext, fieldName string) error {
-	fieldId, contains := tc.schema.fieldNames[fieldName]
-	if !contains {
-		return errors.New("field not found in schema")
+	if err := d.ensureOpen(); err != nil {
+		return err
+	}
+	fieldID, err := fieldIDFromContext(tc, fieldName)
+	if err != nil {
+		return err
 	}
 	var errBuffer *C.char
-	C.document_add_f64_field(d.ptr, C.uint(fieldId), C.double(value), &errBuffer)
+	C.document_add_f64_field(d.ptr, C.uint(fieldID), C.double(value), &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
 // AddDateField adds a date field to the document.
 // The value should be a Unix timestamp in milliseconds.
 func (d *Document) AddDateField(timestampMillis int64, tc *TantivyContext, fieldName string) error {
-	fieldId, contains := tc.schema.fieldNames[fieldName]
-	if !contains {
-		return errors.New("field not found in schema")
+	if err := d.ensureOpen(); err != nil {
+		return err
+	}
+	fieldID, err := fieldIDFromContext(tc, fieldName)
+	if err != nil {
+		return err
 	}
 	var errBuffer *C.char
-	C.document_add_date_field(d.ptr, C.uint(fieldId), C.int64_t(timestampMillis), &errBuffer)
+	C.document_add_date_field(d.ptr, C.uint(fieldID), C.int64_t(timestampMillis), &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
 // AddBytesField adds a bytes field to the document.
 func (d *Document) AddBytesField(value []byte, tc *TantivyContext, fieldName string) error {
-	fieldId, contains := tc.schema.fieldNames[fieldName]
-	if !contains {
-		return errors.New("field not found in schema")
+	if err := d.ensureOpen(); err != nil {
+		return err
+	}
+	fieldID, err := fieldIDFromContext(tc, fieldName)
+	if err != nil {
+		return err
 	}
 
 	var ptr *C.char
@@ -126,22 +179,25 @@ func (d *Document) AddBytesField(value []byte, tc *TantivyContext, fieldName str
 	}
 
 	var errBuffer *C.char
-	C.document_add_bytes_field(d.ptr, C.uint(fieldId), ptr, C.uintptr_t(len(value)), &errBuffer)
+	C.document_add_bytes_field(d.ptr, C.uint(fieldID), ptr, C.uintptr_t(len(value)), &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
 // AddJSONField adds a JSON object value to a JSON field in the document.
 func (d *Document) AddJSONField(value string, tc *TantivyContext, fieldName string) error {
-	fieldId, contains := tc.schema.fieldNames[fieldName]
-	if !contains {
-		return errors.New("field not found in schema")
+	if err := d.ensureOpen(); err != nil {
+		return err
+	}
+	fieldID, err := fieldIDFromContext(tc, fieldName)
+	if err != nil {
+		return err
 	}
 
-	cValue := C.CString(value)
-	d.toFree = append(d.toFree, func() { C.string_free(cValue) })
+	cValue, freeValue := newCString(value)
+	defer freeValue()
 
 	var errBuffer *C.char
-	C.document_add_json_field(d.ptr, C.uint(fieldId), cValue, &errBuffer)
+	C.document_add_json_field(d.ptr, C.uint(fieldID), cValue, &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
@@ -156,25 +212,31 @@ func (d *Document) AddJSONField(value string, tc *TantivyContext, fieldName stri
 //   - string: the JSON representation of the document
 //   - error: an error if the conversion fails, or nil if the operation is successful
 func (d *Document) ToJson(tc *TantivyContext, includeFields ...string) (string, error) {
-	var errBuffer *C.char
+	if err := d.ensureOpen(); err != nil {
+		return "", err
+	}
+	if tc == nil || tc.schema == nil {
+		return "", ErrClosedContext
+	}
+	if err := tc.schema.ensureOpen(); err != nil {
+		return "", err
+	}
 
-	includeFieldsPtr, err := tc.extractFields(includeFields)
+	includeFieldsPtr, err := tc.extractFieldsOrAll(includeFields)
 	if err != nil {
 		return "", err
 	}
 
+	var errBuffer *C.char
 	cStr := C.document_as_json(
 		d.ptr,
 		(*C.uint)(unsafe.Pointer(&includeFieldsPtr[0])),
-		C.uintptr_t(len(includeFields)),
+		C.uintptr_t(len(includeFieldsPtr)),
 		tc.schema.ptr,
 		&errBuffer,
 	)
-
 	if cStr == nil {
-		errorMessage := C.GoString(errBuffer)
-		defer C.string_free(errBuffer)
-		return "", errors.New(errorMessage)
+		return "", tryExtractError(errBuffer)
 	}
 	defer C.string_free(cStr)
 
@@ -202,12 +264,9 @@ func ToModel[T any](doc *Document, tc *TantivyContext, includeFields []string, f
 }
 
 func (d *Document) Free() {
-	C.document_free(d.ptr)
-	d.FreeStrings()
-}
-
-func (d *Document) FreeStrings() {
-	for _, f := range d.toFree {
-		f()
+	if d == nil || d.ptr == nil {
+		return
 	}
+	C.document_free(d.ptr)
+	d.ptr = nil
 }

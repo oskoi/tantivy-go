@@ -3,13 +3,16 @@ use std::ffi::{c_uint, CString};
 use std::os::raw::{c_char, c_float};
 use std::ptr;
 use tantivy::schema::*;
-use tantivy::{Opstamp, Term};
+use tantivy::{indexer::UserOperation, Opstamp, Term};
 
 use crate::c_util::{
     add_and_consume_documents, add_bytes_field, add_date_field, add_f64_field, add_field,
     add_fields, add_i64_field, add_json_field, add_u64_field, assert_pointer, assert_str,
-    assert_string, box_from, convert_document_as_json, create_context_with_schema, delete_docs,
-    drop_any, get_doc, search, search_fast_field, search_fast_field_json, search_json,
+    assert_string, box_from, consume_documents, convert_document_as_json,
+    create_context_with_schema, delete_docs, drop_any, get_doc, search, search_fast_field,
+    search_fast_field_date, search_fast_field_date_json, search_fast_field_f64,
+    search_fast_field_f64_json, search_fast_field_i64, search_fast_field_i64_json,
+    search_fast_field_json, search_fast_field_u64, search_fast_field_u64_json, search_json,
     search_query_parser, set_error, start_lib_init,
 };
 use crate::tantivy_util::{
@@ -93,6 +96,13 @@ pub extern "C" fn schema_builder_build(
     };
 
     Box::into_raw(Box::new(builder.build()))
+}
+
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[logcall]
+#[no_mangle]
+pub extern "C" fn schema_free(schema_ptr: *mut Schema) {
+    drop_any(schema_ptr)
 }
 
 #[logcall]
@@ -485,29 +495,28 @@ pub extern "C" fn context_batch_add_and_delete_documents(
     let result = || -> Result<Opstamp, TantivyGoError> {
         let context = assert_pointer(context_ptr)?;
 
-        // First, delete documents (without committing)
+        // Take ownership of documents before later validation so Go's "batch add consumes
+        // documents" contract remains true even when delete validation or commit fails.
+        let documents = consume_documents(add_docs_ptr, add_docs_len)?;
+
+        let mut operations = Vec::with_capacity(delete_ids_len + documents.len());
         if delete_ids_len > 0 {
             let field = Field::from_field_id(delete_field_id);
             let slice = unsafe { std::slice::from_raw_parts(delete_ids_ptr, delete_ids_len) };
             for &id_ptr in slice {
-                let id_value = assert_str(id_ptr)?;
-                context
-                    .writer
-                    .delete_term(Term::from_field_text(field, &id_value));
+                let id_value = assert_string(id_ptr)?;
+                operations.push(UserOperation::Delete(Term::from_field_text(
+                    field, &id_value,
+                )));
             }
         }
+        operations.extend(documents.into_iter().map(UserOperation::Add));
 
-        // Then, add all documents (without committing)
-        if add_docs_len > 0 {
-            let slice = unsafe { std::slice::from_raw_parts(add_docs_ptr, add_docs_len) };
-            for &doc_ptr in slice {
-                if doc_ptr.is_null() {
-                    return Err(TantivyGoError("Document pointer is null".to_string()));
-                }
-                let doc = unsafe { Box::from_raw(doc_ptr) };
-                let _ = context.writer.add_document(doc.tantivy_doc);
-                // Doc is consumed, Box automatically drops the rest
-            }
+        if !operations.is_empty() {
+            context
+                .writer
+                .run(operations)
+                .map_err(|err| TantivyGoError::from_err("Batch operation", &err.to_string()))?;
         }
 
         // Finally, commit everything at once
@@ -741,6 +750,355 @@ pub extern "C" fn context_search_fast_field_json(
         }
 
         Ok(count)
+    };
+
+    match result() {
+        Ok(count) => count,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+fn write_typed_fast_field_results<T: Copy + Default>(
+    scores: Vec<f32>,
+    values: Vec<Option<T>>,
+    out_scores_ptr: *mut c_float,
+    out_values_ptr: *mut T,
+    out_valid_ptr: *mut bool,
+) -> Result<usize, TantivyGoError> {
+    if out_scores_ptr.is_null() || out_values_ptr.is_null() || out_valid_ptr.is_null() {
+        return Err(TantivyGoError("Output pointers are null".to_string()));
+    }
+
+    let count = scores.len();
+    if count == 0 {
+        return Ok(0);
+    }
+
+    let out_scores = unsafe { std::slice::from_raw_parts_mut(out_scores_ptr, count) };
+    let out_values = unsafe { std::slice::from_raw_parts_mut(out_values_ptr, count) };
+    let out_valid = unsafe { std::slice::from_raw_parts_mut(out_valid_ptr, count) };
+
+    for i in 0..count {
+        out_scores[i] = scores[i];
+        match values[i] {
+            Some(value) => {
+                out_values[i] = value;
+                out_valid[i] = true;
+            }
+            None => {
+                out_values[i] = T::default();
+                out_valid[i] = false;
+            }
+        }
+    }
+
+    Ok(count)
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_fast_field_u64(
+    context_ptr: *mut TantivyContext,
+    field_ids_ptr: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    out_scores_ptr: *mut c_float,
+    out_values_ptr: *mut u64,
+    out_valid_ptr: *mut bool,
+    error_buffer: *mut *mut c_char,
+) -> usize {
+    let result = || -> Result<usize, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        let (scores, values) = search_fast_field_u64(
+            field_ids_ptr,
+            field_weights_ptr,
+            field_ids_len,
+            query_ptr,
+            fast_field_id,
+            docs_limit,
+            context,
+        )?;
+        write_typed_fast_field_results(
+            scores,
+            values,
+            out_scores_ptr,
+            out_values_ptr,
+            out_valid_ptr,
+        )
+    };
+
+    match result() {
+        Ok(count) => count,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_fast_field_i64(
+    context_ptr: *mut TantivyContext,
+    field_ids_ptr: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    out_scores_ptr: *mut c_float,
+    out_values_ptr: *mut i64,
+    out_valid_ptr: *mut bool,
+    error_buffer: *mut *mut c_char,
+) -> usize {
+    let result = || -> Result<usize, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        let (scores, values) = search_fast_field_i64(
+            field_ids_ptr,
+            field_weights_ptr,
+            field_ids_len,
+            query_ptr,
+            fast_field_id,
+            docs_limit,
+            context,
+        )?;
+        write_typed_fast_field_results(
+            scores,
+            values,
+            out_scores_ptr,
+            out_values_ptr,
+            out_valid_ptr,
+        )
+    };
+
+    match result() {
+        Ok(count) => count,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_fast_field_f64(
+    context_ptr: *mut TantivyContext,
+    field_ids_ptr: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    out_scores_ptr: *mut c_float,
+    out_values_ptr: *mut f64,
+    out_valid_ptr: *mut bool,
+    error_buffer: *mut *mut c_char,
+) -> usize {
+    let result = || -> Result<usize, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        let (scores, values) = search_fast_field_f64(
+            field_ids_ptr,
+            field_weights_ptr,
+            field_ids_len,
+            query_ptr,
+            fast_field_id,
+            docs_limit,
+            context,
+        )?;
+        write_typed_fast_field_results(
+            scores,
+            values,
+            out_scores_ptr,
+            out_values_ptr,
+            out_valid_ptr,
+        )
+    };
+
+    match result() {
+        Ok(count) => count,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_fast_field_date(
+    context_ptr: *mut TantivyContext,
+    field_ids_ptr: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    out_scores_ptr: *mut c_float,
+    out_values_ptr: *mut i64,
+    out_valid_ptr: *mut bool,
+    error_buffer: *mut *mut c_char,
+) -> usize {
+    let result = || -> Result<usize, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        let (scores, values) = search_fast_field_date(
+            field_ids_ptr,
+            field_weights_ptr,
+            field_ids_len,
+            query_ptr,
+            fast_field_id,
+            docs_limit,
+            context,
+        )?;
+        write_typed_fast_field_results(
+            scores,
+            values,
+            out_scores_ptr,
+            out_values_ptr,
+            out_valid_ptr,
+        )
+    };
+
+    match result() {
+        Ok(count) => count,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_fast_field_u64_json(
+    context_ptr: *mut TantivyContext,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    out_scores_ptr: *mut c_float,
+    out_values_ptr: *mut u64,
+    out_valid_ptr: *mut bool,
+    error_buffer: *mut *mut c_char,
+) -> usize {
+    let result = || -> Result<usize, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        let (scores, values) =
+            search_fast_field_u64_json(query_ptr, fast_field_id, docs_limit, context)?;
+        write_typed_fast_field_results(
+            scores,
+            values,
+            out_scores_ptr,
+            out_values_ptr,
+            out_valid_ptr,
+        )
+    };
+
+    match result() {
+        Ok(count) => count,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_fast_field_i64_json(
+    context_ptr: *mut TantivyContext,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    out_scores_ptr: *mut c_float,
+    out_values_ptr: *mut i64,
+    out_valid_ptr: *mut bool,
+    error_buffer: *mut *mut c_char,
+) -> usize {
+    let result = || -> Result<usize, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        let (scores, values) =
+            search_fast_field_i64_json(query_ptr, fast_field_id, docs_limit, context)?;
+        write_typed_fast_field_results(
+            scores,
+            values,
+            out_scores_ptr,
+            out_values_ptr,
+            out_valid_ptr,
+        )
+    };
+
+    match result() {
+        Ok(count) => count,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_fast_field_f64_json(
+    context_ptr: *mut TantivyContext,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    out_scores_ptr: *mut c_float,
+    out_values_ptr: *mut f64,
+    out_valid_ptr: *mut bool,
+    error_buffer: *mut *mut c_char,
+) -> usize {
+    let result = || -> Result<usize, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        let (scores, values) =
+            search_fast_field_f64_json(query_ptr, fast_field_id, docs_limit, context)?;
+        write_typed_fast_field_results(
+            scores,
+            values,
+            out_scores_ptr,
+            out_values_ptr,
+            out_valid_ptr,
+        )
+    };
+
+    match result() {
+        Ok(count) => count,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_fast_field_date_json(
+    context_ptr: *mut TantivyContext,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    out_scores_ptr: *mut c_float,
+    out_values_ptr: *mut i64,
+    out_valid_ptr: *mut bool,
+    error_buffer: *mut *mut c_char,
+) -> usize {
+    let result = || -> Result<usize, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        let (scores, values) =
+            search_fast_field_date_json(query_ptr, fast_field_id, docs_limit, context)?;
+        write_typed_fast_field_results(
+            scores,
+            values,
+            out_scores_ptr,
+            out_values_ptr,
+            out_valid_ptr,
+        )
     };
 
     match result() {

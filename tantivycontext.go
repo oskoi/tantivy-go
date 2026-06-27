@@ -12,7 +12,7 @@ import (
 type TantivyContext struct {
 	ptr    *C.TantivyContext
 	schema *Schema
-	lock   sync.Mutex // tantivy writer commits should be executed exclusively
+	mu     sync.Mutex
 }
 
 type queryParserConfig struct {
@@ -29,6 +29,18 @@ func WithRegexesEnabled() QueryParserOption {
 	}
 }
 
+func (tc *TantivyContext) lockNative() (*C.TantivyContext, func(), error) {
+	if tc == nil {
+		return nil, nil, ErrClosedContext
+	}
+	tc.mu.Lock()
+	if tc.ptr == nil {
+		tc.mu.Unlock()
+		return nil, nil, ErrClosedContext
+	}
+	return tc.ptr, tc.mu.Unlock, nil
+}
+
 // NewTantivyContextWithSchema creates a new instance of TantivyContext with the provided schema.
 //
 // Parameters:
@@ -39,18 +51,22 @@ func WithRegexesEnabled() QueryParserOption {
 //   - *TantivyContext: A pointer to a newly created TantivyContext instance.
 //   - error: An error if the index creation fails.
 func NewTantivyContextWithSchema(path string, schema *Schema) (*TantivyContext, error) {
-	cPath := C.CString(path)
-	defer C.string_free(cPath)
+	if err := schema.ensureOpen(); err != nil {
+		return nil, err
+	}
+
+	cPath, freePath := newCString(path)
+	defer freePath()
+
 	var errBuffer *C.char
 	ptr := C.context_create_with_schema(cPath, schema.ptr, &errBuffer)
 	if ptr == nil {
-		defer C.string_free(errBuffer)
-		return nil, errors.New(C.GoString(errBuffer))
+		if err := tryExtractError(errBuffer); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("failed to create tantivy context")
 	}
-	return &TantivyContext{
-		ptr:    ptr,
-		schema: schema,
-	}, nil
+	return &TantivyContext{ptr: ptr, schema: schema}, nil
 }
 
 // AddAndConsumeDocuments adds and consumes the provided documents to the index.
@@ -77,23 +93,27 @@ func (tc *TantivyContext) AddAndConsumeDocumentsWithOpstamp(docs ...*Document) (
 	if len(docs) == 0 {
 		return 0, nil
 	}
-	tc.lock.Lock()
-	defer tc.lock.Unlock()
-	var errBuffer *C.char
+
 	docsPtr := make([]*C.Document, len(docs))
 	for j, doc := range docs {
+		if err := doc.ensureOpen(); err != nil {
+			return 0, err
+		}
 		docsPtr[j] = doc.ptr
 	}
-	opstamp := C.context_add_and_consume_documents(tc.ptr, &docsPtr[0], C.uintptr_t(len(docs)), &errBuffer)
-	for _, doc := range docs {
-		// Free the strings in the document
-		// This is necessary because the document is consumed by the index
-		// and the strings are not freed by the index
-		// We might clone strings on the Rust side to avoid that, but that would be inefficient
-		doc.FreeStrings()
-	}
-	err := tryExtractError(errBuffer)
+
+	ptr, unlock, err := tc.lockNative()
 	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+
+	var errBuffer *C.char
+	opstamp := C.context_add_and_consume_documents(ptr, &docsPtr[0], C.uintptr_t(len(docs)), &errBuffer)
+	for _, doc := range docs {
+		doc.markConsumed()
+	}
+	if err := tryExtractError(errBuffer); err != nil {
 		return 0, err
 	}
 
@@ -126,26 +146,31 @@ func (tc *TantivyContext) DeleteDocumentsWithOpstamp(fieldName string, deleteIds
 	if len(deleteIds) == 0 {
 		return 0, nil
 	}
-	tc.lock.Lock()
-	defer tc.lock.Unlock()
-	fieldId, contains := tc.schema.fieldNames[fieldName]
+	if tc == nil || tc.schema == nil {
+		return 0, ErrClosedContext
+	}
+	fieldID, contains := tc.schema.fieldNames[fieldName]
 	if !contains {
 		return 0, errors.New("field not found in schema")
 	}
 
 	deleteIDsPtr := make([]*C.char, len(deleteIds))
 	for j, id := range deleteIds {
-		cID := C.CString(id)
-		defer C.free(unsafe.Pointer(cID))
+		cID, freeID := newCString(id)
+		defer freeID()
 		deleteIDsPtr[j] = cID
 	}
-	cDeleteIds := (**C.char)(unsafe.Pointer(&deleteIDsPtr[0]))
+
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
 
 	var errBuffer *C.char
-	opstamp := C.context_delete_documents(tc.ptr, C.uint(fieldId), cDeleteIds, C.uintptr_t(len(deleteIds)), &errBuffer)
-	if errBuffer != nil {
-		defer C.string_free(errBuffer)
-		return 0, errors.New(C.GoString(errBuffer))
+	opstamp := C.context_delete_documents(ptr, C.uint(fieldID), (**C.char)(unsafe.Pointer(&deleteIDsPtr[0])), C.uintptr_t(len(deleteIds)), &errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
+		return 0, err
 	}
 
 	return uint64(opstamp), nil
@@ -168,68 +193,68 @@ func (tc *TantivyContext) DeleteDocumentsWithOpstamp(fieldName string, deleteIds
 //   - uint64: The opstamp from the commit operation. Returns 0 if both addDocs and deleteFieldValues are empty.
 //   - error: An error if the batch operation fails.
 func (tc *TantivyContext) BatchAddAndDeleteDocumentsWithOpstamp(addDocs []*Document, deleteFieldName string, deleteFieldValues []string) (uint64, error) {
-	// If both operations are empty, return early without acquiring lock
 	if len(addDocs) == 0 && len(deleteFieldValues) == 0 {
 		return 0, nil
 	}
+	if tc == nil || tc.schema == nil {
+		return 0, ErrClosedContext
+	}
 
-	tc.lock.Lock()
-	defer tc.lock.Unlock()
-
-	// Prepare add documents pointers
 	var addDocsPtr **C.Document
 	var addDocsLen C.uintptr_t
 	if len(addDocs) > 0 {
 		docsPtr := make([]*C.Document, len(addDocs))
 		for j, doc := range addDocs {
+			if err := doc.ensureOpen(); err != nil {
+				return 0, err
+			}
 			docsPtr[j] = doc.ptr
 		}
 		addDocsPtr = &docsPtr[0]
 		addDocsLen = C.uintptr_t(len(addDocs))
 	}
 
-	// Prepare delete parameters
-	var deleteFieldId C.uint
+	var deleteFieldID C.uint
 	var deleteValuesPtr **C.char
 	var deleteValuesLen C.uintptr_t
-
 	if len(deleteFieldValues) > 0 {
-		fieldId, contains := tc.schema.fieldNames[deleteFieldName]
+		fieldID, contains := tc.schema.fieldNames[deleteFieldName]
 		if !contains {
 			return 0, errors.New("field not found in schema")
 		}
-		deleteFieldId = C.uint(fieldId)
+		deleteFieldID = C.uint(fieldID)
 
 		deleteValuesCPtr := make([]*C.char, len(deleteFieldValues))
 		for j, value := range deleteFieldValues {
-			cValue := C.CString(value)
-			defer C.free(unsafe.Pointer(cValue))
+			cValue, freeValue := newCString(value)
+			defer freeValue()
 			deleteValuesCPtr[j] = cValue
 		}
 		deleteValuesPtr = (**C.char)(unsafe.Pointer(&deleteValuesCPtr[0]))
 		deleteValuesLen = C.uintptr_t(len(deleteFieldValues))
 	}
 
-	// Execute batch operation
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+
 	var errBuffer *C.char
 	opstamp := C.context_batch_add_and_delete_documents(
-		tc.ptr,
+		ptr,
 		addDocsPtr,
 		addDocsLen,
-		deleteFieldId,
+		deleteFieldID,
 		deleteValuesPtr,
 		deleteValuesLen,
 		&errBuffer,
 	)
-
-	// Free document strings after consumption
 	for _, doc := range addDocs {
-		doc.FreeStrings()
+		doc.markConsumed()
 	}
-
-	if errBuffer != nil {
-		defer C.string_free(errBuffer)
-		return 0, errors.New(C.GoString(errBuffer))
+	if err := tryExtractError(errBuffer); err != nil {
+		return 0, err
 	}
 
 	return uint64(opstamp), nil
@@ -241,13 +266,39 @@ func (tc *TantivyContext) BatchAddAndDeleteDocumentsWithOpstamp(addDocs []*Docum
 //   - uint64: The number of documents.
 //   - error: An error if retrieving the document count fails.
 func (tc *TantivyContext) NumDocs() (uint64, error) {
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+
 	var errBuffer *C.char
-	numDocs := C.context_num_docs(tc.ptr, &errBuffer)
-	if errBuffer != nil {
-		defer C.string_free(errBuffer)
-		return 0, errors.New(C.GoString(errBuffer))
+	numDocs := C.context_num_docs(ptr, &errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
+		return 0, err
 	}
 	return uint64(numDocs), nil
+}
+
+func validateSearchContext(sCtx SearchContext) error {
+	if sCtx == nil {
+		return errors.New("search context is nil")
+	}
+	if sCtx.GetDocsLimit() == 0 {
+		return ErrInvalidDocsLimit
+	}
+	return nil
+}
+
+func cFieldWeights(fieldNames []string, weights []float32) ([]C.float, error) {
+	if len(weights) != len(fieldNames) {
+		return nil, fmt.Errorf("fieldNames and weights length mismatch")
+	}
+	fieldWeights := make([]C.float, len(fieldNames))
+	for i, weight := range weights {
+		fieldWeights[i] = C.float(weight)
+	}
+	return fieldWeights, nil
 }
 
 // Search performs a search query on the index and returns the search results.
@@ -260,26 +311,33 @@ func (tc *TantivyContext) NumDocs() (uint64, error) {
 //   - *SearchResult: A pointer to the SearchResult containing the search results.
 //   - error: An error if the search fails.
 func (tc *TantivyContext) Search(sCtx SearchContext) (*SearchResult, error) {
+	if err := validateSearchContext(sCtx); err != nil {
+		return nil, err
+	}
 	fieldNames, weights := sCtx.GetFieldAndWeights()
 	if len(fieldNames) == 0 {
 		return nil, fmt.Errorf("fieldNames must not be empty")
 	}
-	cQuery := C.CString(sCtx.GetQuery())
-	defer C.string_free(cQuery)
-
 	fieldNamesPtr, err := tc.extractFields(fieldNames)
 	if err != nil {
 		return nil, err
 	}
-
-	fieldWeightsPtr := make([]C.float, len(fieldNames))
-	for j, weight := range weights {
-		fieldWeightsPtr[j] = C.float(weight)
+	fieldWeightsPtr, err := cFieldWeights(fieldNames, weights)
+	if err != nil {
+		return nil, err
 	}
+	cQuery, freeQuery := newCString(sCtx.GetQuery())
+	defer freeQuery()
+
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 
 	var errBuffer *C.char
-	ptr := C.context_search(
-		tc.ptr,
+	resultPtr := C.context_search(
+		ptr,
 		(*C.uint)(unsafe.Pointer(&fieldNamesPtr[0])),
 		(*C.float)(unsafe.Pointer(&fieldWeightsPtr[0])),
 		C.uintptr_t(len(fieldNames)),
@@ -288,12 +346,14 @@ func (tc *TantivyContext) Search(sCtx SearchContext) (*SearchResult, error) {
 		pointerCType(sCtx.GetDocsLimit()),
 		C.bool(sCtx.WithHighlights()),
 	)
-	if ptr == nil {
-		defer C.string_free(errBuffer)
-		return nil, errors.New(C.GoString(errBuffer))
+	if resultPtr == nil {
+		if err := tryExtractError(errBuffer); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("search result is nil")
 	}
 
-	return &SearchResult{ptr: ptr}, nil
+	return &SearchResult{ptr: resultPtr}, nil
 }
 
 // SearchJson performs a simplified search query on the index and returns the search results.
@@ -306,27 +366,34 @@ func (tc *TantivyContext) Search(sCtx SearchContext) (*SearchResult, error) {
 //   - *SearchResult: A pointer to the SearchResult containing the search results.
 //   - error: An error if the search fails.
 func (tc *TantivyContext) SearchJson(sCtx SearchContext) (*SearchResult, error) {
-	// Ensure the query is valid
-	cQuery := C.CString(sCtx.GetQuery())
-	defer C.string_free(cQuery)
+	if err := validateSearchContext(sCtx); err != nil {
+		return nil, err
+	}
+	cQuery, freeQuery := newCString(sCtx.GetQuery())
+	defer freeQuery()
 
-	// Prepare the error buffer
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+
 	var errBuffer *C.char
-
-	// Call the C function
-	ptr := C.context_search_json(
-		tc.ptr,
+	resultPtr := C.context_search_json(
+		ptr,
 		cQuery,
 		&errBuffer,
 		pointerCType(sCtx.GetDocsLimit()),
 		C.bool(sCtx.WithHighlights()),
 	)
-	if ptr == nil {
-		defer C.string_free(errBuffer)
-		return nil, errors.New(C.GoString(errBuffer))
+	if resultPtr == nil {
+		if err := tryExtractError(errBuffer); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("search result is nil")
 	}
 
-	return &SearchResult{ptr: ptr}, nil
+	return &SearchResult{ptr: resultPtr}, nil
 }
 
 // SearchQueryParser performs a search using tantivy's query parser syntax.
@@ -342,6 +409,10 @@ func (tc *TantivyContext) SearchJson(sCtx SearchContext) (*SearchResult, error) 
 //   - *SearchResult: A pointer to the SearchResult containing the search results.
 //   - error: An error if the search fails.
 func (tc *TantivyContext) SearchQueryParser(query string, docsLimit int, withHighlights bool, opts ...QueryParserOption) (*SearchResult, error) {
+	if docsLimit <= 0 {
+		return nil, ErrInvalidDocsLimit
+	}
+
 	cfg := queryParserConfig{}
 	for _, opt := range opts {
 		if opt != nil {
@@ -349,29 +420,49 @@ func (tc *TantivyContext) SearchQueryParser(query string, docsLimit int, withHig
 		}
 	}
 
-	cQuery := C.CString(query)
-	defer C.string_free(cQuery)
+	cQuery, freeQuery := newCString(query)
+	defer freeQuery()
+
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 
 	var errBuffer *C.char
-	ptr := C.context_search_query_parser(
-		tc.ptr,
+	resultPtr := C.context_search_query_parser(
+		ptr,
 		cQuery,
 		pointerCType(docsLimit),
 		C.bool(withHighlights),
 		C.bool(cfg.allowRegexes),
 		&errBuffer,
 	)
-	if ptr == nil {
-		defer C.string_free(errBuffer)
-		return nil, errors.New(C.GoString(errBuffer))
+	if resultPtr == nil {
+		if err := tryExtractError(errBuffer); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("search result is nil")
 	}
 
-	return &SearchResult{ptr: ptr}, nil
+	return &SearchResult{ptr: resultPtr}, nil
 }
 
-// Close waits till the merging operations are finished and releases all the resources held by the indexWriter
+// Close waits till the merging operations are finished and releases all the resources held by the indexWriter.
 func (tc *TantivyContext) Close() error {
+	if tc == nil {
+		return nil
+	}
+
+	tc.mu.Lock()
+	if tc.ptr == nil {
+		tc.mu.Unlock()
+		return nil
+	}
 	ptr := tc.ptr
+	tc.ptr = nil
+	tc.mu.Unlock()
+
 	var errBuffer *C.char
 	C.context_wait_and_free(ptr, &errBuffer)
 	return tryExtractError(errBuffer)
@@ -395,11 +486,17 @@ func (tc *TantivyContext) Free() {
 // Returns:
 //   - error: An error if the registration fails.
 func (tc *TantivyContext) RegisterTextAnalyzerNgram(tokenizerName string, minGram, maxGram uintptr, prefixOnly bool) error {
-	cTokenizerName := C.CString(tokenizerName)
-	defer C.string_free(cTokenizerName)
-	var errBuffer *C.char
-	C.context_register_text_analyzer_ngram(tc.ptr, cTokenizerName, C.uintptr_t(minGram), C.uintptr_t(maxGram), C.bool(prefixOnly), &errBuffer)
+	cTokenizerName, freeTokenizerName := newCString(tokenizerName)
+	defer freeTokenizerName()
 
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	var errBuffer *C.char
+	C.context_register_text_analyzer_ngram(ptr, cTokenizerName, C.uintptr_t(minGram), C.uintptr_t(maxGram), C.bool(prefixOnly), &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
@@ -414,30 +511,43 @@ func (tc *TantivyContext) RegisterTextAnalyzerNgram(tokenizerName string, minGra
 // Returns:
 //   - error: An error if the registration fails.
 func (tc *TantivyContext) RegisterTextAnalyzerEdgeNgram(tokenizerName string, minGram, maxGram uintptr, limit uintptr) error {
-	cTokenizerName := C.CString(tokenizerName)
-	defer C.string_free(cTokenizerName)
+	cTokenizerName, freeTokenizerName := newCString(tokenizerName)
+	defer freeTokenizerName()
+
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	var errBuffer *C.char
-	C.context_register_text_analyzer_edge_ngram(tc.ptr, cTokenizerName, C.uintptr_t(minGram), C.uintptr_t(maxGram), C.uintptr_t(limit), &errBuffer)
+	C.context_register_text_analyzer_edge_ngram(ptr, cTokenizerName, C.uintptr_t(minGram), C.uintptr_t(maxGram), C.uintptr_t(limit), &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
 // RegisterTextAnalyzerSimple registers a simple text analyzer with the index.
 //
 // Parameters:
-//   - tokenizerName (string): The name of the tokenizer to be used.
+//   - tokenizerName (string): The name of the simple tokenizer to be used.
 //   - textLimit (uintptr): The limit on the length of the text to be analyzed.
-//   - lang (string): The language code for the text analyzer.
+//   - lang (Language): The language code for the text analyzer.
 //
 // Returns:
 //   - error: An error if the registration fails.
 func (tc *TantivyContext) RegisterTextAnalyzerSimple(tokenizerName string, textLimit uintptr, lang Language) error {
-	cTokenizerName := C.CString(tokenizerName)
-	defer C.string_free(cTokenizerName)
-	cLang := C.CString(string(lang))
-	defer C.string_free(cLang)
-	var errBuffer *C.char
-	C.context_register_text_analyzer_simple(tc.ptr, cTokenizerName, C.uintptr_t(textLimit), cLang, &errBuffer)
+	cTokenizerName, freeTokenizerName := newCString(tokenizerName)
+	defer freeTokenizerName()
+	cLang, freeLang := newCString(string(lang))
+	defer freeLang()
 
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	var errBuffer *C.char
+	C.context_register_text_analyzer_simple(ptr, cTokenizerName, C.uintptr_t(textLimit), cLang, &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
@@ -449,11 +559,17 @@ func (tc *TantivyContext) RegisterTextAnalyzerSimple(tokenizerName string, textL
 // Returns:
 //   - error: An error if the registration fails.
 func (tc *TantivyContext) RegisterTextAnalyzerRaw(tokenizerName string) error {
-	cTokenizerName := C.CString(tokenizerName)
-	defer C.string_free(cTokenizerName)
-	var errBuffer *C.char
-	C.context_register_text_analyzer_raw(tc.ptr, cTokenizerName, &errBuffer)
+	cTokenizerName, freeTokenizerName := newCString(tokenizerName)
+	defer freeTokenizerName()
 
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	var errBuffer *C.char
+	C.context_register_text_analyzer_raw(ptr, cTokenizerName, &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
@@ -473,27 +589,27 @@ func GetSearchResults[T any](
 	f func(json string) (T, error),
 	includeFields ...string,
 ) ([]T, error) {
-	var models []T
 	defer searchResult.Free()
 
 	size, err := searchResult.GetSize()
 	if err != nil {
-		fmt.Println("Failed to get search result size:", err)
 		return nil, err
 	}
 
-	// Iterate through search results
-	for next := range size {
+	models := make([]T, 0, size)
+	for next := uint64(0); next < size; next++ {
 		doc, err := searchResult.Get(next)
-		if err != nil {
-			break
-		}
-		model, err := ToModel(doc, tc, includeFields, f)
 		if err != nil {
 			return nil, err
 		}
-		models = append(models, model)
+
+		model, err := ToModel(doc, tc, includeFields, f)
 		doc.Free()
+		if err != nil {
+			return nil, err
+		}
+
+		models = append(models, model)
 	}
 	return models, nil
 }
@@ -502,16 +618,36 @@ func (tc *TantivyContext) extractFields(fieldNames []string) ([]C.uint, error) {
 	if len(fieldNames) == 0 {
 		return nil, errors.New("field names is empty")
 	}
+	if tc == nil || tc.schema == nil {
+		return nil, ErrClosedContext
+	}
 
 	includeFieldsPtr := make([]C.uint, len(fieldNames))
 	for i, fieldName := range fieldNames {
-		fieldId, contains := tc.schema.fieldNames[fieldName]
+		fieldID, contains := tc.schema.fieldNames[fieldName]
 		if !contains {
 			return nil, errors.New("field not found in schema")
 		}
-		includeFieldsPtr[i] = C.uint(fieldId)
+		includeFieldsPtr[i] = C.uint(fieldID)
 	}
 	return includeFieldsPtr, nil
+}
+
+func (tc *TantivyContext) extractFieldsOrAll(fieldNames []string) ([]C.uint, error) {
+	if tc == nil || tc.schema == nil {
+		return nil, ErrClosedContext
+	}
+	if len(fieldNames) == 0 {
+		includeFieldsPtr := make([]C.uint, 0, len(tc.schema.fieldNames))
+		for _, fieldID := range tc.schema.fieldNames {
+			includeFieldsPtr = append(includeFieldsPtr, C.uint(fieldID))
+		}
+		if len(includeFieldsPtr) == 0 {
+			return nil, errors.New("schema has no fields")
+		}
+		return includeFieldsPtr, nil
+	}
+	return tc.extractFields(fieldNames)
 }
 
 // CommitOpstamp gets the opstamp of the last commit.
@@ -521,7 +657,12 @@ func (tc *TantivyContext) extractFields(fieldNames []string) ([]C.uint, error) {
 // updated after the index is closed and reopened. During an active session, this
 // will return 0 for a new index or the opstamp from when the index was opened.
 func (tc *TantivyContext) CommitOpstamp() uint64 {
-	return uint64(C.context_commit_opstamp(tc.ptr))
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return 0
+	}
+	defer unlock()
+	return uint64(C.context_commit_opstamp(ptr))
 }
 
 // ReloadReader forces the index reader to reload and check for new commits.
@@ -533,8 +674,14 @@ func (tc *TantivyContext) CommitOpstamp() uint64 {
 // Returns:
 //   - error: An error if reloading the reader fails.
 func (tc *TantivyContext) ReloadReader() error {
+	ptr, unlock, err := tc.lockNative()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	var errBuffer *C.char
-	C.context_reload_reader(tc.ptr, &errBuffer)
+	C.context_reload_reader(ptr, &errBuffer)
 	return tryExtractError(errBuffer)
 }
 
@@ -546,10 +693,15 @@ func (tc *TantivyContext) ReloadReader() error {
 //   - uint64: The number of files that were deleted.
 //   - error: An error if garbage collection fails.
 func (tc *TantivyContext) GarbageCollectFiles() (uint64, error) {
-	var errBuffer *C.char
-	deletedCount := C.context_garbage_collect_files(tc.ptr, &errBuffer)
-	err := tryExtractError(errBuffer)
+	ptr, unlock, err := tc.lockNative()
 	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+
+	var errBuffer *C.char
+	deletedCount := C.context_garbage_collect_files(ptr, &errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
 		return 0, err
 	}
 	return uint64(deletedCount), nil

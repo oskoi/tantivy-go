@@ -142,28 +142,28 @@ install-debug-ios-amd64: build-debug-ios-amd64
 	@cp target/x86_64-apple-ios/debug/libtantivy_go.a ../libs/ios-amd64
 
 build-darwin-amd64:
-	ENV MACOSX_DEPLOYMENT_TARGET=10.15 cargo build --release --target x86_64-apple-darwin
+	env MACOSX_DEPLOYMENT_TARGET=10.15 cargo build --release --target x86_64-apple-darwin
 
 install-darwin-amd64: build-darwin-amd64
 	@mkdir -p ../libs/darwin-amd64
 	@cp target/x86_64-apple-darwin/release/libtantivy_go.a ../libs/darwin-amd64
 
 build-debug-darwin-amd64:
-	ENV MACOSX_DEPLOYMENT_TARGET=10.15 cargo build --target x86_64-apple-darwin
+	env MACOSX_DEPLOYMENT_TARGET=10.15 cargo build --target x86_64-apple-darwin
 
 install-debug-darwin-amd64: build-debug-darwin-amd64
 	@mkdir -p ../libs/darwin-amd64
 	@cp target/x86_64-apple-darwin/debug/libtantivy_go.a ../libs/darwin-amd64
 
 build-darwin-arm64:
-	ENV MACOSX_DEPLOYMENT_TARGET=10.15 cargo build --release --target aarch64-apple-darwin
+	env MACOSX_DEPLOYMENT_TARGET=10.15 cargo build --release --target aarch64-apple-darwin
 
 install-darwin-arm64: build-darwin-arm64
 	@mkdir -p ../libs/darwin-arm64
 	@cp target/aarch64-apple-darwin/release/libtantivy_go.a ../libs/darwin-arm64
 
 build-debug-darwin-arm64:
-	ENV MACOSX_DEPLOYMENT_TARGET=10.15 cargo build --target aarch64-apple-darwin
+	env MACOSX_DEPLOYMENT_TARGET=10.15 cargo build --target aarch64-apple-darwin
 
 install-debug-darwin-arm64: build-debug-darwin-arm64
 	@mkdir -p ../libs/darwin-arm64
@@ -212,7 +212,7 @@ install-debug-all: \
     install-debug-windows-amd64
 
 ### Download release
-REPO := anyproto/tantivy-go
+REPO := oskoi/tantivy-go
 VERSION := v<version, for example 0.1.2>
 OUTPUT_DIR := ../libs
 

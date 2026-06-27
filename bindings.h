@@ -25,6 +25,8 @@ uint32_t schema_builder_add_text_field(SchemaBuilder *builder_ptr,
 
 Schema *schema_builder_build(SchemaBuilder *builder_ptr, char **error_buffer);
 
+void schema_free(Schema *schema_ptr);
+
 uint32_t schema_builder_add_u64_field(SchemaBuilder *builder_ptr,
                                       const char *field_name_ptr,
                                       bool stored,
@@ -166,6 +168,90 @@ uintptr_t context_search_fast_field_json(struct TantivyContext *context_ptr,
                                          float *out_scores_ptr,
                                          char **out_values_ptr,
                                          char **error_buffer);
+
+uintptr_t context_search_fast_field_u64(struct TantivyContext *context_ptr,
+                                        unsigned int *field_ids_ptr,
+                                        float *field_weights_ptr,
+                                        uintptr_t field_ids_len,
+                                        const char *query_ptr,
+                                        unsigned int fast_field_id,
+                                        uintptr_t docs_limit,
+                                        float *out_scores_ptr,
+                                        uint64_t *out_values_ptr,
+                                        bool *out_valid_ptr,
+                                        char **error_buffer);
+
+uintptr_t context_search_fast_field_i64(struct TantivyContext *context_ptr,
+                                        unsigned int *field_ids_ptr,
+                                        float *field_weights_ptr,
+                                        uintptr_t field_ids_len,
+                                        const char *query_ptr,
+                                        unsigned int fast_field_id,
+                                        uintptr_t docs_limit,
+                                        float *out_scores_ptr,
+                                        int64_t *out_values_ptr,
+                                        bool *out_valid_ptr,
+                                        char **error_buffer);
+
+uintptr_t context_search_fast_field_f64(struct TantivyContext *context_ptr,
+                                        unsigned int *field_ids_ptr,
+                                        float *field_weights_ptr,
+                                        uintptr_t field_ids_len,
+                                        const char *query_ptr,
+                                        unsigned int fast_field_id,
+                                        uintptr_t docs_limit,
+                                        float *out_scores_ptr,
+                                        double *out_values_ptr,
+                                        bool *out_valid_ptr,
+                                        char **error_buffer);
+
+uintptr_t context_search_fast_field_date(struct TantivyContext *context_ptr,
+                                         unsigned int *field_ids_ptr,
+                                         float *field_weights_ptr,
+                                         uintptr_t field_ids_len,
+                                         const char *query_ptr,
+                                         unsigned int fast_field_id,
+                                         uintptr_t docs_limit,
+                                         float *out_scores_ptr,
+                                         int64_t *out_values_ptr,
+                                         bool *out_valid_ptr,
+                                         char **error_buffer);
+
+uintptr_t context_search_fast_field_u64_json(struct TantivyContext *context_ptr,
+                                             const char *query_ptr,
+                                             unsigned int fast_field_id,
+                                             uintptr_t docs_limit,
+                                             float *out_scores_ptr,
+                                             uint64_t *out_values_ptr,
+                                             bool *out_valid_ptr,
+                                             char **error_buffer);
+
+uintptr_t context_search_fast_field_i64_json(struct TantivyContext *context_ptr,
+                                             const char *query_ptr,
+                                             unsigned int fast_field_id,
+                                             uintptr_t docs_limit,
+                                             float *out_scores_ptr,
+                                             int64_t *out_values_ptr,
+                                             bool *out_valid_ptr,
+                                             char **error_buffer);
+
+uintptr_t context_search_fast_field_f64_json(struct TantivyContext *context_ptr,
+                                             const char *query_ptr,
+                                             unsigned int fast_field_id,
+                                             uintptr_t docs_limit,
+                                             float *out_scores_ptr,
+                                             double *out_values_ptr,
+                                             bool *out_valid_ptr,
+                                             char **error_buffer);
+
+uintptr_t context_search_fast_field_date_json(struct TantivyContext *context_ptr,
+                                              const char *query_ptr,
+                                              unsigned int fast_field_id,
+                                              uintptr_t docs_limit,
+                                              float *out_scores_ptr,
+                                              int64_t *out_values_ptr,
+                                              bool *out_valid_ptr,
+                                              char **error_buffer);
 
 /**
  * Performs a search using a query parser string (supports range queries, fuzzy queries, etc.)

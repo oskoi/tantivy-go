@@ -2,9 +2,7 @@ package tantivy_go
 
 //#include "bindings.h"
 import "C"
-import (
-	"errors"
-)
+import "errors"
 
 type (
 	SchemaBuilder struct {
@@ -77,6 +75,38 @@ func NewSchemaBuilder() (*SchemaBuilder, error) {
 	return &SchemaBuilder{ptr: ptr, fieldNames: make(map[string]int)}, nil
 }
 
+func (b *SchemaBuilder) ensureOpen() error {
+	if b == nil || b.ptr == nil {
+		return ErrClosedSchemaBuilder
+	}
+	return nil
+}
+
+func (s *Schema) ensureOpen() error {
+	if s == nil || s.ptr == nil {
+		return ErrClosedSchema
+	}
+	return nil
+}
+
+func (s *Schema) Free() {
+	if s == nil || s.ptr == nil {
+		return
+	}
+	C.schema_free(s.ptr)
+	s.ptr = nil
+}
+
+func (b *SchemaBuilder) ensureNewField(name string) error {
+	if err := b.ensureOpen(); err != nil {
+		return err
+	}
+	if _, contains := b.fieldNames[name]; contains {
+		return errors.New("field already defined: " + name)
+	}
+	return nil
+}
+
 // AddTextField adds a text field to the schema being built.
 //
 // Parameters:
@@ -96,16 +126,17 @@ func (b *SchemaBuilder) AddTextField(
 	indexRecordOption int,
 	tokenizer string,
 ) error {
-	if _, contains := b.fieldNames[name]; contains {
-		return errors.New("field already defined: " + name)
+	if err := b.ensureNewField(name); err != nil {
+		return err
 	}
-	b.fieldNames[name] = -1
-	cName := C.CString(name)
-	cTokenizer := C.CString(tokenizer)
-	defer C.string_free(cName)
-	defer C.string_free(cTokenizer)
+
+	cName, freeName := newCString(name)
+	defer freeName()
+	cTokenizer, freeTokenizer := newCString(tokenizer)
+	defer freeTokenizer()
+
 	var errBuffer *C.char
-	fieldId := C.schema_builder_add_text_field(
+	fieldID := C.schema_builder_add_text_field(
 		b.ptr,
 		cName,
 		C._Bool(stored),
@@ -115,23 +146,37 @@ func (b *SchemaBuilder) AddTextField(
 		cTokenizer,
 		&errBuffer,
 	)
-	b.fieldNames[name] = int(fieldId)
-	return tryExtractError(errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
+		return err
+	}
+
+	b.fieldNames[name] = int(fieldID)
+	return nil
 }
 
 // BuildSchema finalizes the schema building process and returns the resulting Schema.
 // Returns a pointer to the Schema and an error if the schema could not be built.
 func (b *SchemaBuilder) BuildSchema() (*Schema, error) {
+	if err := b.ensureOpen(); err != nil {
+		return nil, err
+	}
+
 	var errBuffer *C.char
 	ptr := C.schema_builder_build(b.ptr, &errBuffer)
 	if ptr == nil {
-		defer C.string_free(errBuffer)
-		return nil, errors.New(C.GoString(errBuffer))
+		if err := tryExtractError(errBuffer); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("failed to build schema")
 	}
-	return &Schema{
-		ptr:        ptr,
-		fieldNames: b.fieldNames,
-	}, nil
+
+	b.ptr = nil
+	fieldNames := make(map[string]int, len(b.fieldNames))
+	for k, v := range b.fieldNames {
+		fieldNames[k] = v
+	}
+
+	return &Schema{ptr: ptr, fieldNames: fieldNames}, nil
 }
 
 // AddU64Field adds an unsigned 64-bit integer field to the schema.
@@ -143,14 +188,15 @@ func (b *SchemaBuilder) BuildSchema() (*Schema, error) {
 //
 // Returns an error if the field could not be added.
 func (b *SchemaBuilder) AddU64Field(name string, stored bool, isFast bool, isIndexed bool) error {
-	if _, contains := b.fieldNames[name]; contains {
-		return errors.New("field already defined: " + name)
+	if err := b.ensureNewField(name); err != nil {
+		return err
 	}
-	b.fieldNames[name] = -1
-	cName := C.CString(name)
-	defer C.string_free(cName)
+
+	cName, freeName := newCString(name)
+	defer freeName()
+
 	var errBuffer *C.char
-	fieldId := C.schema_builder_add_u64_field(
+	fieldID := C.schema_builder_add_u64_field(
 		b.ptr,
 		cName,
 		C._Bool(stored),
@@ -158,8 +204,12 @@ func (b *SchemaBuilder) AddU64Field(name string, stored bool, isFast bool, isInd
 		C._Bool(isIndexed),
 		&errBuffer,
 	)
-	b.fieldNames[name] = int(fieldId)
-	return tryExtractError(errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
+		return err
+	}
+
+	b.fieldNames[name] = int(fieldID)
+	return nil
 }
 
 // AddI64Field adds a signed 64-bit integer field to the schema.
@@ -171,14 +221,15 @@ func (b *SchemaBuilder) AddU64Field(name string, stored bool, isFast bool, isInd
 //
 // Returns an error if the field could not be added.
 func (b *SchemaBuilder) AddI64Field(name string, stored bool, isFast bool, isIndexed bool) error {
-	if _, contains := b.fieldNames[name]; contains {
-		return errors.New("field already defined: " + name)
+	if err := b.ensureNewField(name); err != nil {
+		return err
 	}
-	b.fieldNames[name] = -1
-	cName := C.CString(name)
-	defer C.string_free(cName)
+
+	cName, freeName := newCString(name)
+	defer freeName()
+
 	var errBuffer *C.char
-	fieldId := C.schema_builder_add_i64_field(
+	fieldID := C.schema_builder_add_i64_field(
 		b.ptr,
 		cName,
 		C._Bool(stored),
@@ -186,8 +237,12 @@ func (b *SchemaBuilder) AddI64Field(name string, stored bool, isFast bool, isInd
 		C._Bool(isIndexed),
 		&errBuffer,
 	)
-	b.fieldNames[name] = int(fieldId)
-	return tryExtractError(errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
+		return err
+	}
+
+	b.fieldNames[name] = int(fieldID)
+	return nil
 }
 
 // AddF64Field adds a 64-bit floating point field to the schema.
@@ -199,14 +254,15 @@ func (b *SchemaBuilder) AddI64Field(name string, stored bool, isFast bool, isInd
 //
 // Returns an error if the field could not be added.
 func (b *SchemaBuilder) AddF64Field(name string, stored bool, isFast bool, isIndexed bool) error {
-	if _, contains := b.fieldNames[name]; contains {
-		return errors.New("field already defined: " + name)
+	if err := b.ensureNewField(name); err != nil {
+		return err
 	}
-	b.fieldNames[name] = -1
-	cName := C.CString(name)
-	defer C.string_free(cName)
+
+	cName, freeName := newCString(name)
+	defer freeName()
+
 	var errBuffer *C.char
-	fieldId := C.schema_builder_add_f64_field(
+	fieldID := C.schema_builder_add_f64_field(
 		b.ptr,
 		cName,
 		C._Bool(stored),
@@ -214,8 +270,12 @@ func (b *SchemaBuilder) AddF64Field(name string, stored bool, isFast bool, isInd
 		C._Bool(isIndexed),
 		&errBuffer,
 	)
-	b.fieldNames[name] = int(fieldId)
-	return tryExtractError(errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
+		return err
+	}
+
+	b.fieldNames[name] = int(fieldID)
+	return nil
 }
 
 // AddDateField adds a date field to the schema.
@@ -228,14 +288,15 @@ func (b *SchemaBuilder) AddF64Field(name string, stored bool, isFast bool, isInd
 // Returns an error if the field could not be added.
 // The date value should be provided as Unix timestamp in milliseconds.
 func (b *SchemaBuilder) AddDateField(name string, stored bool, isFast bool, isIndexed bool) error {
-	if _, contains := b.fieldNames[name]; contains {
-		return errors.New("field already defined: " + name)
+	if err := b.ensureNewField(name); err != nil {
+		return err
 	}
-	b.fieldNames[name] = -1
-	cName := C.CString(name)
-	defer C.string_free(cName)
+
+	cName, freeName := newCString(name)
+	defer freeName()
+
 	var errBuffer *C.char
-	fieldId := C.schema_builder_add_date_field(
+	fieldID := C.schema_builder_add_date_field(
 		b.ptr,
 		cName,
 		C._Bool(stored),
@@ -243,8 +304,12 @@ func (b *SchemaBuilder) AddDateField(name string, stored bool, isFast bool, isIn
 		C._Bool(isIndexed),
 		&errBuffer,
 	)
-	b.fieldNames[name] = int(fieldId)
-	return tryExtractError(errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
+		return err
+	}
+
+	b.fieldNames[name] = int(fieldID)
+	return nil
 }
 
 // AddBytesField adds a bytes field to the schema.
@@ -254,14 +319,15 @@ func (b *SchemaBuilder) AddDateField(name string, stored bool, isFast bool, isIn
 //   - isFast: Whether the field should be a fast field.
 //   - isIndexed: Whether the field should be indexed.
 func (b *SchemaBuilder) AddBytesField(name string, stored bool, isFast bool, isIndexed bool) error {
-	if _, contains := b.fieldNames[name]; contains {
-		return errors.New("field already defined: " + name)
+	if err := b.ensureNewField(name); err != nil {
+		return err
 	}
-	b.fieldNames[name] = -1
-	cName := C.CString(name)
-	defer C.string_free(cName)
+
+	cName, freeName := newCString(name)
+	defer freeName()
+
 	var errBuffer *C.char
-	fieldId := C.schema_builder_add_bytes_field(
+	fieldID := C.schema_builder_add_bytes_field(
 		b.ptr,
 		cName,
 		C._Bool(stored),
@@ -269,34 +335,38 @@ func (b *SchemaBuilder) AddBytesField(name string, stored bool, isFast bool, isI
 		C._Bool(isIndexed),
 		&errBuffer,
 	)
-	b.fieldNames[name] = int(fieldId)
-	return tryExtractError(errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
+		return err
+	}
+
+	b.fieldNames[name] = int(fieldID)
+	return nil
 }
 
 // AddJSONField adds a JSON object field to the schema.
 func (b *SchemaBuilder) AddJSONField(name string, opts JSONFieldOptions) error {
-	if _, contains := b.fieldNames[name]; contains {
-		return errors.New("field already defined: " + name)
+	if err := b.ensureNewField(name); err != nil {
+		return err
 	}
 
 	if opts.IndexTokenizer == "" {
 		opts.IndexTokenizer = DefaultTokenizer
 	}
 
-	b.fieldNames[name] = -1
-	cName := C.CString(name)
-	defer C.string_free(cName)
-	cIndexTokenizer := C.CString(opts.IndexTokenizer)
-	defer C.string_free(cIndexTokenizer)
+	cName, freeName := newCString(name)
+	defer freeName()
+	cIndexTokenizer, freeIndexTokenizer := newCString(opts.IndexTokenizer)
+	defer freeIndexTokenizer()
 
 	var cFastTokenizer *C.char
 	if opts.FastTokenizer != "" {
-		cFastTokenizer = C.CString(opts.FastTokenizer)
-		defer C.string_free(cFastTokenizer)
+		var freeFastTokenizer func()
+		cFastTokenizer, freeFastTokenizer = newCString(opts.FastTokenizer)
+		defer freeFastTokenizer()
 	}
 
 	var errBuffer *C.char
-	fieldId := C.schema_builder_add_json_field(
+	fieldID := C.schema_builder_add_json_field(
 		b.ptr,
 		cName,
 		C._Bool(opts.Stored),
@@ -308,6 +378,10 @@ func (b *SchemaBuilder) AddJSONField(name string, opts JSONFieldOptions) error {
 		C._Bool(opts.ExpandDotsEnabled),
 		&errBuffer,
 	)
-	b.fieldNames[name] = int(fieldId)
-	return tryExtractError(errBuffer)
+	if err := tryExtractError(errBuffer); err != nil {
+		return err
+	}
+
+	b.fieldNames[name] = int(fieldID)
+	return nil
 }

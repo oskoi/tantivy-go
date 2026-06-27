@@ -10,7 +10,10 @@ mod util;
 
 pub use self::document::convert_document_to_json;
 pub use self::edge_ngram_tokenizer::EdgeNgramTokenizer;
-pub use self::fast_field::read_fast_field_values;
+pub use self::fast_field::{
+    read_date_fast_field_values, read_f64_fast_field_values, read_fast_field_values,
+    read_i64_fast_field_values, read_u64_fast_field_values,
+};
 pub use self::highlights::find_highlights;
 pub use self::models::Document;
 pub use self::models::Fragment;

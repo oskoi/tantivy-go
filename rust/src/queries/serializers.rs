@@ -114,25 +114,27 @@ impl<'de> Deserialize<'de> for QueryElement {
             .and_then(QueryType::from_u64)
             .ok_or_else(|| serde::de::Error::custom("Invalid query_type"))?;
 
-        fn extract_query_indices_and_boost(
+        fn extract_query_indices_and_boost<'a, D: Deserializer<'a>>(
             query_data: &serde_json::Map<String, serde_json::Value>,
-        ) -> (usize, usize, f32) {
+        ) -> Result<(usize, usize, f32), D::Error> {
             let field_index = query_data
                 .get("field_index")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
+                .ok_or_else(|| serde::de::Error::missing_field("field_index"))?
+                as usize;
 
             let text_index = query_data
                 .get("text_index")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
+                .ok_or_else(|| serde::de::Error::missing_field("text_index"))?
+                as usize;
 
             let boost = query_data
                 .get("boost")
                 .and_then(|v| v.as_f64().map(|f| f as f32))
                 .unwrap_or(1.0);
 
-            (field_index, text_index, boost)
+            Ok((field_index, text_index, boost))
         }
 
         let query = match query_type {
@@ -159,7 +161,8 @@ impl<'de> Deserialize<'de> for QueryElement {
             | QueryType::EveryTermQuery
             | QueryType::OneOfTermQuery => {
                 let query_data = extract_query_data::<D>(&map)?;
-                let (field_index, text_index, boost) = extract_query_indices_and_boost(query_data);
+                let (field_index, text_index, boost) =
+                    extract_query_indices_and_boost::<D>(query_data)?;
 
                 Some(match query_type {
                     QueryType::PhraseQuery => GoQuery::PhraseQuery {

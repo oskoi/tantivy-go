@@ -2,7 +2,7 @@
 
 This project provides Go bindings for the [Tantivy](https://github.com/quickwit-oss/tantivy) search engine library. Tantivy is a full-text search engine library written in Rust, and this project aims to make its powerful search capabilities available to Go developers.
 
-The library is thread safe and can be used in a concurrent environment
+The Go wrapper serializes access to each `TantivyContext` before crossing the Rust FFI boundary. A single context may be used from multiple goroutines, but long-running searches, commits, reloads, and close operations are executed one at a time for native pointer safety.
 
 # Why
 
@@ -39,6 +39,23 @@ doc.AddDateField(time.Now().UnixMilli(), tc, "created_at")
 // Search by date range using RFC3339 format
 result, err := tc.SearchQueryParser("created_at:[2024-01-01T00:00:00Z TO 2024-12-31T23:59:59Z]", 10, false)
 ```
+
+### Typed fast-field search
+Numeric and date fast fields can be returned without loading full documents:
+
+```go
+result, err := tc.SearchFastFieldU64(searchCtx, "price")
+if err != nil {
+	return err
+}
+for i, value := range result.Values {
+	if result.Valid[i] {
+		fmt.Println(value, result.Scores[i])
+	}
+}
+```
+
+Date fast fields return `time.Time` values through `SearchFastFieldDate`.
 
 ### JSON Field Support
 Supports native Tantivy JSON object fields with full options:
@@ -86,6 +103,13 @@ result, err := tc.SearchQueryParser("title:/prod.*/", 10, false, tantivy_go.With
 - Supports numeric and text ranges
 - Can be combined with boolean operators (AND, OR, NOT)
 
+
+## Lifecycle rules
+
+- `TantivyContext.Close` is safe to call multiple times.
+- Documents passed to `AddAndConsumeDocuments` or batch add are consumed and cannot be reused.
+- `GetSearchResults` consumes and frees the `SearchResult` passed to it.
+
 ## Search quality testing
 [Test quality](testquality/README.md)
 
@@ -95,7 +119,7 @@ result, err := tc.SearchQueryParser("title:/prod.*/", 10, false, tantivy_go.With
 go get github.com/oskoi/tantivy-go
 ```
 
-Ensure your libraries are in your `ld` path.
+Ensure your libraries are in your `ld` path. Default builds without `tantivylocal` require `libtantivy_go` in the system linker path. Source checkouts can run tests with `go test -tags tantivylocal ./...` after local libraries are present under `libs/<platform>`.
 
 ### Example Run
 - Run `make download-tantivy-all` inside the `rust` folder

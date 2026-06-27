@@ -11,7 +11,6 @@ const (
 	EveryTermQuery
 	OneOfTermQuery
 	AllQuery
-	// RangeQuery and FuzzyQuery are not yet implemented
 	// RangeQuery
 	// FuzzyQuery
 )
@@ -42,16 +41,14 @@ type BooleanQuery struct {
 }
 
 type FinalQuery struct {
-	Texts  []string      `json:"texts"`
-	Fields []string      `json:"fields"`
 	Query  *BooleanQuery `json:"query"`
+	Fields []string      `json:"fields"`
+	Texts  []string      `json:"texts"`
 }
 
 type sharedStore struct {
-	texts     map[string]int
-	fields    map[string]int
-	textList  []string
-	fieldList []string
+	fields []string
+	texts  []string
 }
 
 type QueryBuilder struct {
@@ -62,45 +59,43 @@ type QueryBuilder struct {
 func NewQueryBuilder() *QueryBuilder {
 	return &QueryBuilder{
 		store: &sharedStore{
-			texts:     make(map[string]int),
-			fields:    make(map[string]int),
-			textList:  []string{},
-			fieldList: []string{},
+			fields: make([]string, 0),
+			texts:  make([]string, 0),
 		},
-		subqueries: []QueryElement{},
+		subqueries: make([]QueryElement, 0),
 	}
 }
 
 func (qb *QueryBuilder) NestedBuilder() *QueryBuilder {
 	return &QueryBuilder{
 		store:      qb.store,
-		subqueries: []QueryElement{},
+		subqueries: make([]QueryElement, 0),
 	}
 }
 
 func (qb *QueryBuilder) AddText(text string) int {
-	if idx, exists := qb.store.texts[text]; exists {
-		return idx
+	for i, t := range qb.store.texts {
+		if t == text {
+			return i
+		}
 	}
-	idx := len(qb.store.textList)
-	qb.store.texts[text] = idx
-	qb.store.textList = append(qb.store.textList, text)
-	return idx
+	qb.store.texts = append(qb.store.texts, text)
+	return len(qb.store.texts) - 1
 }
 
 func (qb *QueryBuilder) AddField(field string) int {
-	if idx, exists := qb.store.fields[field]; exists {
-		return idx
+	for i, f := range qb.store.fields {
+		if f == field {
+			return i
+		}
 	}
-	idx := len(qb.store.fieldList)
-	qb.store.fields[field] = idx
-	qb.store.fieldList = append(qb.store.fieldList, field)
-	return idx
+	qb.store.fields = append(qb.store.fields, field)
+	return len(qb.store.fields) - 1
 }
 
 func (qb *QueryBuilder) Query(modifier QueryModifier, field string, text string, queryType QueryType, boost float64) *QueryBuilder {
-	textIndex := qb.AddText(text)
 	fieldIndex := qb.AddField(field)
+	textIndex := qb.AddText(text)
 	qb.subqueries = append(qb.subqueries, QueryElement{
 		Query: &FieldQuery{
 			FieldIndex: fieldIndex,
@@ -114,6 +109,9 @@ func (qb *QueryBuilder) Query(modifier QueryModifier, field string, text string,
 }
 
 func (qb *QueryBuilder) BooleanQuery(modifier QueryModifier, subBuilder *QueryBuilder, boost float64) *QueryBuilder {
+	if qb == nil || subBuilder == nil || qb.store != subBuilder.store {
+		panic("nested query builder must be created with parent.NestedBuilder()")
+	}
 	qb.subqueries = append(qb.subqueries, QueryElement{
 		Query: &BooleanQuery{
 			Subqueries: subBuilder.subqueries,
@@ -127,7 +125,9 @@ func (qb *QueryBuilder) BooleanQuery(modifier QueryModifier, subBuilder *QueryBu
 
 func (qb *QueryBuilder) AllQuery(modifier QueryModifier, boost float64) *QueryBuilder {
 	qb.subqueries = append(qb.subqueries, QueryElement{
-		Query:     &AllQueryStruct{Boost: boost},
+		Query: &AllQueryStruct{
+			Boost: boost,
+		},
 		Modifier:  modifier,
 		QueryType: AllQuery,
 	})
@@ -136,11 +136,12 @@ func (qb *QueryBuilder) AllQuery(modifier QueryModifier, boost float64) *QueryBu
 
 func (qb *QueryBuilder) Build() FinalQuery {
 	return FinalQuery{
-		Texts:  qb.store.textList,
-		Fields: qb.store.fieldList,
 		Query: &BooleanQuery{
 			Subqueries: qb.subqueries,
+			Boost:      0,
 		},
+		Fields: qb.store.fields,
+		Texts:  qb.store.texts,
 	}
 }
 

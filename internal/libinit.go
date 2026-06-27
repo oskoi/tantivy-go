@@ -1,11 +1,20 @@
 package internal
 
-//#include "../bindings.h"
+/*
+#include "../bindings.h"
+#include <stdlib.h>
+*/
 import "C"
 import (
 	"errors"
-	"fmt"
+	"unsafe"
 )
+
+func freeCString(value *C.char) {
+	if value != nil {
+		C.free(unsafe.Pointer(value))
+	}
+}
 
 // LibInit for tests init
 func LibInit(cleanOnPanic, utf8Lenient bool, directive ...string) error {
@@ -17,16 +26,17 @@ func LibInit(cleanOnPanic, utf8Lenient bool, directive ...string) error {
 	}
 
 	cInitVal := C.CString(initVal)
-	defer C.string_free(cInitVal)
+	defer freeCString(cInitVal)
 	cCleanOnPanic := C.bool(cleanOnPanic)
 	cUtf8Lenient := C.bool(utf8Lenient)
 	var errBuffer *C.char
-	fmt.Println("### lenient", utf8Lenient)
 	C.init_lib(cInitVal, &errBuffer, cCleanOnPanic, cUtf8Lenient)
 
+	if errBuffer == nil {
+		return nil
+	}
 	errorMessage := C.GoString(errBuffer)
-	defer C.string_free(errBuffer)
-
+	C.string_free(errBuffer)
 	if errorMessage != "" {
 		return errors.New(errorMessage)
 	}

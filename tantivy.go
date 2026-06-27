@@ -1,6 +1,7 @@
 package tantivy_go
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/oskoi/tantivy-go/internal"
@@ -57,7 +58,19 @@ const TokenizerNgram = "ngram"
 const TokenizerEdgeNgram = "edge_ngram"
 const TokenizerRaw = "raw"
 
-var doOnce sync.Once
+var (
+	ErrClosedContext       = errors.New("tantivy context is closed")
+	ErrClosedDocument      = errors.New("tantivy document is closed")
+	ErrConsumedDocument    = errors.New("tantivy document is consumed")
+	ErrClosedSchema        = errors.New("tantivy schema is closed")
+	ErrClosedSchemaBuilder = errors.New("tantivy schema builder is closed")
+	ErrInvalidDocsLimit    = errors.New("docsLimit must be greater than 0")
+)
+
+var (
+	doOnce     sync.Once
+	libInitErr error
+)
 
 // LibInit initializes the library with an optional directive.
 //
@@ -68,9 +81,8 @@ var doOnce sync.Once
 // Returns:
 // - An error if the initialization fails.
 func LibInit(cleanOnPanic, utf8Lenient bool, directive ...string) error {
-	var err error
 	doOnce.Do(func() {
-		err = internal.LibInit(cleanOnPanic, utf8Lenient, directive...)
+		libInitErr = internal.LibInit(cleanOnPanic, utf8Lenient, directive...)
 	})
-	return err
+	return libInitErr
 }

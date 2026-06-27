@@ -1,8 +1,10 @@
 use crate::config;
 use crate::queries::parse_query_from_json;
 use crate::tantivy_util::{
-    convert_document_to_json, find_highlights, read_fast_field_values, Document, SearchResult,
-    TantivyContext, TantivyGoError, DOCUMENT_BUDGET_BYTES,
+    convert_document_to_json, find_highlights, read_date_fast_field_values,
+    read_f64_fast_field_values, read_fast_field_values, read_i64_fast_field_values,
+    read_u64_fast_field_values, Document, SearchResult, TantivyContext, TantivyGoError,
+    DOCUMENT_BUDGET_BYTES,
 };
 use log::debug;
 use serde_json::json;
@@ -14,10 +16,12 @@ use std::panic::PanicHookInfo;
 use std::path::Path;
 use std::{fs, panic, slice};
 use tantivy::directory::MmapDirectory;
+use tantivy::indexer::UserOperation;
 use tantivy::query::{Query, QueryParser};
 use tantivy::schema::{Field, Schema};
 use tantivy::{
-    Index, IndexWriter, Opstamp, ReloadPolicy, Score, TantivyDocument, TantivyError, Term,
+    DocAddress, Index, IndexWriter, Opstamp, ReloadPolicy, Score, TantivyDocument, TantivyError,
+    Term,
 };
 
 pub fn set_error(err: &str, error_buffer: *mut *mut c_char) {
@@ -203,20 +207,36 @@ fn create_tantivy_context(
     Ok(TantivyContext::new(index, writer, reader))
 }
 
+pub fn consume_documents(
+    docs_ptr: *mut *mut Document,
+    docs_len: usize,
+) -> Result<Vec<TantivyDocument>, TantivyGoError> {
+    if docs_len == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut documents = Vec::with_capacity(docs_len);
+    process_type_slice(docs_ptr, docs_len, |doc| {
+        let doc = *box_from(doc);
+        documents.push(doc.tantivy_doc);
+        Ok(())
+    })?;
+    Ok(documents)
+}
+
 pub fn add_and_consume_documents(
     docs_ptr: *mut *mut Document,
     docs_len: usize,
     writer: &mut IndexWriter,
 ) -> Result<Opstamp, TantivyGoError> {
-    process_type_slice(docs_ptr, docs_len, |doc| {
-        let doc = *box_from(doc);
-        let _ = writer.add_document(doc.tantivy_doc);
-        Ok(())
-    })
-    .map_err(|err| {
-        rollback(writer);
-        TantivyGoError(format!("Failed to add the document: {}", err))
-    })?;
+    let documents = consume_documents(docs_ptr, docs_len)?;
+    if !documents.is_empty() {
+        let operations: Vec<UserOperation<TantivyDocument>> =
+            documents.into_iter().map(UserOperation::Add).collect();
+        writer
+            .run(operations)
+            .map_err(|err| TantivyGoError::from_err("Add document", &err.to_string()))?;
+    }
 
     let opstamp = commit(writer, "Failed to commit the document")?;
     Ok(opstamp)
@@ -264,10 +284,12 @@ pub fn get_doc<'a>(
     index: usize,
     result: &mut SearchResult,
 ) -> Result<*mut Document, TantivyGoError> {
-    if index >= result.documents.len() {
-        return Err(TantivyGoError(
-            format!("{} is more than {}", index, result.documents.len() - 1).to_string(),
-        ));
+    let len = result.documents.len();
+    if index >= len {
+        return Err(TantivyGoError(format!(
+            "document index {} out of range for {} search results",
+            index, len
+        )));
     }
 
     let doc = result.documents[index].clone();
@@ -490,16 +512,35 @@ pub fn search_query_parser(
     perform_search(|_index| Ok(query), docs_limit, context, with_highlights)
 }
 
-/// Performs a search and returns only fast field values (no full document loading).
-pub fn search_fast_field(
+fn search_top_doc_addresses_with_query(
+    searcher: &tantivy::Searcher,
+    query: &dyn Query,
+    docs_limit: usize,
+) -> Result<(Vec<Score>, Vec<DocAddress>), TantivyGoError> {
+    let top_docs = searcher
+        .search(
+            query,
+            &tantivy::collector::TopDocs::with_limit(docs_limit).order_by_score(),
+        )
+        .map_err(|err| TantivyGoError::from_err("Search err", &err.to_string()))?;
+
+    let mut scores = Vec::with_capacity(top_docs.len());
+    let mut doc_addresses = Vec::with_capacity(top_docs.len());
+    for (score, doc_address) in top_docs {
+        scores.push(score);
+        doc_addresses.push(doc_address);
+    }
+
+    Ok((scores, doc_addresses))
+}
+
+fn build_query_parser_query(
     field_ids: *mut c_uint,
     field_weights_ptr: *mut c_float,
     field_ids_len: usize,
     query_ptr: *const c_char,
-    fast_field_id: c_uint,
-    docs_limit: usize,
-    context: &mut TantivyContext,
-) -> Result<(Vec<f32>, Vec<Option<String>>), TantivyGoError> {
+    index: &Index,
+) -> Result<Box<dyn Query>, TantivyGoError> {
     let mut fields = Vec::with_capacity(field_ids_len);
     process_slice(field_ids, field_ids_len, |_, field_id| {
         fields.push(Field::from_field_id(field_id));
@@ -513,41 +554,100 @@ pub fn search_fast_field(
     })?;
 
     let query_str = assert_string(query_ptr)?;
+    let mut query_parser = QueryParser::for_index(index, fields);
+    for (field, weight) in weights {
+        query_parser.set_field_boost(field, weight as Score);
+    }
+    query_parser
+        .parse_query(&query_str)
+        .map_err(|e| TantivyGoError(e.to_string()))
+}
 
+fn search_fast_field_with_query_parser<T>(
+    field_ids: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+    read_values: fn(
+        &tantivy::Searcher,
+        &Schema,
+        Field,
+        &[DocAddress],
+    ) -> Result<Vec<Option<T>>, TantivyGoError>,
+) -> Result<(Vec<f32>, Vec<Option<T>>), TantivyGoError> {
+    let query = build_query_parser_query(
+        field_ids,
+        field_weights_ptr,
+        field_ids_len,
+        query_ptr,
+        &context.index,
+    )?;
     let searcher = context.reader().searcher();
     let schema = context.index.schema();
     let fast_field = Field::from_field_id(fast_field_id);
 
-    let mut query_parser = QueryParser::for_index(&context.index, fields);
-    for (field, weight) in weights {
-        query_parser.set_field_boost(field, weight as Score);
-    }
-    let query = query_parser
-        .parse_query(&query_str)
-        .map_err(|e| TantivyGoError(e.to_string()))?;
-
-    let top_docs = searcher
-        .search(
-            &query,
-            &tantivy::collector::TopDocs::with_limit(docs_limit).order_by_score(),
-        )
-        .map_err(|err| TantivyGoError::from_err("Search err", &err.to_string()))?;
-
-    if top_docs.is_empty() {
-        return Ok((vec![], vec![]));
+    let (scores, doc_addresses) =
+        search_top_doc_addresses_with_query(&searcher, query.as_ref(), docs_limit)?;
+    if doc_addresses.is_empty() {
+        return Ok((scores, vec![]));
     }
 
-    let mut scores = Vec::with_capacity(top_docs.len());
-    let mut doc_addresses = Vec::with_capacity(top_docs.len());
-
-    for (score, doc_address) in top_docs {
-        scores.push(score);
-        doc_addresses.push(doc_address);
-    }
-
-    let values = read_fast_field_values(&searcher, &schema, fast_field, &doc_addresses)?;
-
+    let values = read_values(&searcher, &schema, fast_field, &doc_addresses)?;
     Ok((scores, values))
+}
+
+fn search_fast_field_with_json<T>(
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+    read_values: fn(
+        &tantivy::Searcher,
+        &Schema,
+        Field,
+        &[DocAddress],
+    ) -> Result<Vec<Option<T>>, TantivyGoError>,
+) -> Result<(Vec<f32>, Vec<Option<T>>), TantivyGoError> {
+    let query_str = assert_string(query_ptr)?;
+    let schema = context.index.schema();
+    let query = parse_query_from_json(&context.index, &schema, &query_str)
+        .map_err(|e| TantivyGoError(e.to_string()))?;
+    let searcher = context.reader().searcher();
+    let fast_field = Field::from_field_id(fast_field_id);
+
+    let (scores, doc_addresses) =
+        search_top_doc_addresses_with_query(&searcher, query.as_ref(), docs_limit)?;
+    if doc_addresses.is_empty() {
+        return Ok((scores, vec![]));
+    }
+
+    let values = read_values(&searcher, &schema, fast_field, &doc_addresses)?;
+    Ok((scores, values))
+}
+
+/// Performs a search and returns only fast field values (no full document loading).
+pub fn search_fast_field(
+    field_ids: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+) -> Result<(Vec<f32>, Vec<Option<String>>), TantivyGoError> {
+    search_fast_field_with_query_parser(
+        field_ids,
+        field_weights_ptr,
+        field_ids_len,
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_fast_field_values,
+    )
 }
 
 /// Performs a search using JSON query and returns only fast field values (no full document loading).
@@ -557,37 +657,157 @@ pub fn search_fast_field_json(
     docs_limit: usize,
     context: &mut TantivyContext,
 ) -> Result<(Vec<f32>, Vec<Option<String>>), TantivyGoError> {
-    let query_str = assert_string(query_ptr)?;
+    search_fast_field_with_json(
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_fast_field_values,
+    )
+}
 
-    let searcher = context.reader().searcher();
-    let schema = context.index.schema();
-    let fast_field = Field::from_field_id(fast_field_id);
+pub fn search_fast_field_u64(
+    field_ids: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+) -> Result<(Vec<f32>, Vec<Option<u64>>), TantivyGoError> {
+    search_fast_field_with_query_parser(
+        field_ids,
+        field_weights_ptr,
+        field_ids_len,
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_u64_fast_field_values,
+    )
+}
 
-    let query = parse_query_from_json(&context.index, &schema, &query_str)
-        .map_err(|e| TantivyGoError(e.to_string()))?;
+pub fn search_fast_field_i64(
+    field_ids: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+) -> Result<(Vec<f32>, Vec<Option<i64>>), TantivyGoError> {
+    search_fast_field_with_query_parser(
+        field_ids,
+        field_weights_ptr,
+        field_ids_len,
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_i64_fast_field_values,
+    )
+}
 
-    let top_docs = searcher
-        .search(
-            &query,
-            &tantivy::collector::TopDocs::with_limit(docs_limit).order_by_score(),
-        )
-        .map_err(|err| TantivyGoError::from_err("Search err", &err.to_string()))?;
+pub fn search_fast_field_f64(
+    field_ids: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+) -> Result<(Vec<f32>, Vec<Option<f64>>), TantivyGoError> {
+    search_fast_field_with_query_parser(
+        field_ids,
+        field_weights_ptr,
+        field_ids_len,
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_f64_fast_field_values,
+    )
+}
 
-    if top_docs.is_empty() {
-        return Ok((vec![], vec![]));
-    }
+pub fn search_fast_field_date(
+    field_ids: *mut c_uint,
+    field_weights_ptr: *mut c_float,
+    field_ids_len: usize,
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+) -> Result<(Vec<f32>, Vec<Option<i64>>), TantivyGoError> {
+    search_fast_field_with_query_parser(
+        field_ids,
+        field_weights_ptr,
+        field_ids_len,
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_date_fast_field_values,
+    )
+}
 
-    let mut scores = Vec::with_capacity(top_docs.len());
-    let mut doc_addresses = Vec::with_capacity(top_docs.len());
+pub fn search_fast_field_u64_json(
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+) -> Result<(Vec<f32>, Vec<Option<u64>>), TantivyGoError> {
+    search_fast_field_with_json(
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_u64_fast_field_values,
+    )
+}
 
-    for (score, doc_address) in top_docs {
-        scores.push(score);
-        doc_addresses.push(doc_address);
-    }
+pub fn search_fast_field_i64_json(
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+) -> Result<(Vec<f32>, Vec<Option<i64>>), TantivyGoError> {
+    search_fast_field_with_json(
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_i64_fast_field_values,
+    )
+}
 
-    let values = read_fast_field_values(&searcher, &schema, fast_field, &doc_addresses)?;
+pub fn search_fast_field_f64_json(
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+) -> Result<(Vec<f32>, Vec<Option<f64>>), TantivyGoError> {
+    search_fast_field_with_json(
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_f64_fast_field_values,
+    )
+}
 
-    Ok((scores, values))
+pub fn search_fast_field_date_json(
+    query_ptr: *const c_char,
+    fast_field_id: c_uint,
+    docs_limit: usize,
+    context: &mut TantivyContext,
+) -> Result<(Vec<f32>, Vec<Option<i64>>), TantivyGoError> {
+    search_fast_field_with_json(
+        query_ptr,
+        fast_field_id,
+        docs_limit,
+        context,
+        read_date_fast_field_values,
+    )
 }
 
 pub fn drop_any<T>(ptr: *mut T) {

@@ -1,6 +1,6 @@
 use tantivy::schema::{
-    BytesOptions, DateOptions, IndexRecordOption, JsonObjectOptions, NumericOptions, SchemaBuilder,
-    TextFieldIndexing, FAST, STORED, STRING, TEXT,
+    BytesOptions, DateOptions, DateTimePrecision, IndexRecordOption, JsonObjectOptions,
+    NumericOptions, SchemaBuilder, TextFieldIndexing, FAST, STORED, STRING, TEXT,
 };
 
 pub fn add_text_field(
@@ -79,7 +79,7 @@ pub fn add_schema_f64_field(
 }
 
 fn date_field_options(stored: bool, is_fast: bool, is_indexed: bool) -> DateOptions {
-    let mut options = DateOptions::default();
+    let mut options = DateOptions::default().set_precision(DateTimePrecision::Milliseconds);
     if stored {
         options = options.set_stored();
     }
