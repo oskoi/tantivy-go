@@ -356,7 +356,7 @@ func (tc *TantivyContext) Search(sCtx SearchContext) (*SearchResult, error) {
 	return &SearchResult{ptr: resultPtr}, nil
 }
 
-// SearchJson performs a simplified search query on the index and returns the search results.
+// SearchJSON performs a simplified search query on the index and returns the search results.
 //
 // Parameters:
 //   - sCtx (SearchContext): The context for the search, containing query string,
@@ -365,7 +365,7 @@ func (tc *TantivyContext) Search(sCtx SearchContext) (*SearchResult, error) {
 // Returns:
 //   - *SearchResult: A pointer to the SearchResult containing the search results.
 //   - error: An error if the search fails.
-func (tc *TantivyContext) SearchJson(sCtx SearchContext) (*SearchResult, error) {
+func (tc *TantivyContext) SearchJSON(sCtx SearchContext) (*SearchResult, error) {
 	if err := validateSearchContext(sCtx); err != nil {
 		return nil, err
 	}
@@ -667,7 +667,7 @@ func (tc *TantivyContext) CommitOpstamp() uint64 {
 
 // ReloadReader forces the index reader to reload and check for new commits.
 //
-// Note: This method is called automatically during search operations (Search, SearchJson, NumDocs),
+// Note: This method is called automatically during search operations (Search, SearchJSON, NumDocs),
 // so manual calls are typically not necessary. The reader uses ReloadPolicy::Manual internally,
 // but reloading happens automatically when needed.
 //

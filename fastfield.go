@@ -119,10 +119,10 @@ func (tc *TantivyContext) SearchFastField(sCtx SearchContext, fastFieldName stri
 	return result, nil
 }
 
-// SearchFastFieldJson performs a search using JSON query returning only fast field values.
+// SearchFastFieldJSON performs a search using JSON query returning only fast field values.
 // The field must be configured with isFast=true in the schema.
 // Use this with AllQuery or other JSON-based queries.
-func (tc *TantivyContext) SearchFastFieldJson(sCtx SearchContext, fastFieldName string) (*FastFieldResult, error) {
+func (tc *TantivyContext) SearchFastFieldJSON(sCtx SearchContext, fastFieldName string) (*FastFieldResult, error) {
 	_, _, fastFieldID, docsLimit, cQuery, freeQuery, err := tc.prepareFastFieldSearch(sCtx, fastFieldName, false)
 	if err != nil {
 		return nil, err
@@ -333,7 +333,7 @@ func (tc *TantivyContext) SearchFastFieldDate(sCtx SearchContext, fastFieldName 
 	return buildTypedFastFieldResult(count, outScores, outValues, outValid, func(v C.int64_t) time.Time { return time.UnixMilli(int64(v)).UTC() }), nil
 }
 
-func (tc *TantivyContext) SearchFastFieldU64Json(sCtx SearchContext, fastFieldName string) (*TypedFastFieldResult[uint64], error) {
+func (tc *TantivyContext) SearchFastFieldU64JSON(sCtx SearchContext, fastFieldName string) (*TypedFastFieldResult[uint64], error) {
 	_, _, fastFieldID, docsLimit, cQuery, freeQuery, err := tc.prepareFastFieldSearch(sCtx, fastFieldName, false)
 	if err != nil {
 		return nil, err
@@ -367,7 +367,7 @@ func (tc *TantivyContext) SearchFastFieldU64Json(sCtx SearchContext, fastFieldNa
 	return buildTypedFastFieldResult(count, outScores, outValues, outValid, func(v C.uint64_t) uint64 { return uint64(v) }), nil
 }
 
-func (tc *TantivyContext) SearchFastFieldI64Json(sCtx SearchContext, fastFieldName string) (*TypedFastFieldResult[int64], error) {
+func (tc *TantivyContext) SearchFastFieldI64JSON(sCtx SearchContext, fastFieldName string) (*TypedFastFieldResult[int64], error) {
 	_, _, fastFieldID, docsLimit, cQuery, freeQuery, err := tc.prepareFastFieldSearch(sCtx, fastFieldName, false)
 	if err != nil {
 		return nil, err
@@ -401,7 +401,7 @@ func (tc *TantivyContext) SearchFastFieldI64Json(sCtx SearchContext, fastFieldNa
 	return buildTypedFastFieldResult(count, outScores, outValues, outValid, func(v C.int64_t) int64 { return int64(v) }), nil
 }
 
-func (tc *TantivyContext) SearchFastFieldF64Json(sCtx SearchContext, fastFieldName string) (*TypedFastFieldResult[float64], error) {
+func (tc *TantivyContext) SearchFastFieldF64JSON(sCtx SearchContext, fastFieldName string) (*TypedFastFieldResult[float64], error) {
 	_, _, fastFieldID, docsLimit, cQuery, freeQuery, err := tc.prepareFastFieldSearch(sCtx, fastFieldName, false)
 	if err != nil {
 		return nil, err
@@ -435,7 +435,7 @@ func (tc *TantivyContext) SearchFastFieldF64Json(sCtx SearchContext, fastFieldNa
 	return buildTypedFastFieldResult(count, outScores, outValues, outValid, func(v C.double) float64 { return float64(v) }), nil
 }
 
-func (tc *TantivyContext) SearchFastFieldDateJson(sCtx SearchContext, fastFieldName string) (*TypedFastFieldResult[time.Time], error) {
+func (tc *TantivyContext) SearchFastFieldDateJSON(sCtx SearchContext, fastFieldName string) (*TypedFastFieldResult[time.Time], error) {
 	_, _, fastFieldID, docsLimit, cQuery, freeQuery, err := tc.prepareFastFieldSearch(sCtx, fastFieldName, false)
 	if err != nil {
 		return nil, err

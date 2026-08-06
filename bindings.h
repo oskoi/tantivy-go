@@ -12,6 +12,31 @@ typedef struct SearchResult SearchResult;
 
 typedef struct TantivyContext TantivyContext;
 
+typedef struct SortedSearchField {
+  /**
+   * Input field-name bytes are borrowed only for `context_search_json_sorted`;
+   * they remain caller-owned and must not be retained.
+   */
+  const char *name_ptr;
+  uint8_t direction;
+} SortedSearchField;
+
+typedef struct SortedSearchValue {
+  uint8_t kind;
+  bool missing;
+  /**
+   * For input cursors, text bytes are borrowed only for
+   * `context_search_json_sorted` and remain caller-owned. For output tuples,
+   * this borrows `SearchResult` storage until `search_result_free`; Go copies it first.
+   */
+  const char *text_ptr;
+  uintptr_t text_len;
+  uint64_t u64_value;
+  int64_t i64_value;
+  double f64_value;
+  bool bool_value;
+} SortedSearchValue;
+
 SchemaBuilder *schema_builder_new(void);
 
 uint32_t schema_builder_add_text_field(SchemaBuilder *builder_ptr,
@@ -136,6 +161,17 @@ struct SearchResult *context_search_json(struct TantivyContext *context_ptr,
                                          char **error_buffer,
                                          uintptr_t docs_limit,
                                          bool with_highlights);
+
+struct SearchResult *context_search_json_sorted(struct TantivyContext *context_ptr,
+                                                const char *query_ptr,
+                                                const struct SortedSearchField *sort_fields_ptr,
+                                                uintptr_t sort_fields_len,
+                                                const struct SortedSearchValue *after_ptr,
+                                                uintptr_t after_len,
+                                                uintptr_t docs_limit,
+                                                int64_t deadline_seconds,
+                                                uint32_t deadline_nanos,
+                                                char **error_buffer);
 
 /**
  * Performs a search and returns only fast field values (no full document loading).
@@ -267,6 +303,18 @@ struct SearchResult *context_search_query_parser(struct TantivyContext *context_
 void context_free(struct TantivyContext *context_ptr);
 
 uintptr_t search_result_get_size(struct SearchResult *result_ptr, char **error_buffer);
+
+bool search_result_get_has_more(struct SearchResult *result_ptr, char **error_buffer);
+
+uintptr_t search_result_get_sort_values_len(struct SearchResult *result_ptr,
+                                            uintptr_t index,
+                                            char **error_buffer);
+
+void search_result_copy_sort_values(struct SearchResult *result_ptr,
+                                    uintptr_t index,
+                                    struct SortedSearchValue *values_ptr,
+                                    uintptr_t values_len,
+                                    char **error_buffer);
 
 struct Document *search_result_get_doc(struct SearchResult *result_ptr,
                                        uintptr_t index,

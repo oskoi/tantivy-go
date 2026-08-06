@@ -160,7 +160,7 @@ func main() {
 			break
 		}
 		// Get JSON representation of the document
-		jsonStr, err := doc.ToJson(index, NameId, NameTitle, NameBody)
+		jsonStr, err := doc.ToJSON(index, NameId, NameTitle, NameBody)
 		if err != nil {
 			fmt.Println("Failed to get document JSON:", err)
 		} else {

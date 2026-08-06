@@ -65,6 +65,7 @@ var (
 	ErrClosedSchema        = errors.New("tantivy schema is closed")
 	ErrClosedSchemaBuilder = errors.New("tantivy schema builder is closed")
 	ErrInvalidDocsLimit    = errors.New("docsLimit must be greater than 0")
+	ErrSearchTimeout       = errors.New("tantivy sorted search timed out")
 )
 
 var (

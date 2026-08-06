@@ -275,7 +275,7 @@ func TestBatchDeleteAndAddSameID(t *testing.T) {
 			doc, err := results.Get(0)
 			require.NoError(t, err)
 
-			jsonStr, err := doc.ToJson(index, "id", "content")
+			jsonStr, err := doc.ToJSON(index, "id", "content")
 			require.NoError(t, err)
 			doc.Free()
 

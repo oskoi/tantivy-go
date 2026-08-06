@@ -13,7 +13,11 @@ use crate::c_util::{
     search_fast_field_date, search_fast_field_date_json, search_fast_field_f64,
     search_fast_field_f64_json, search_fast_field_i64, search_fast_field_i64_json,
     search_fast_field_json, search_fast_field_u64, search_fast_field_u64_json, search_json,
-    search_query_parser, set_error, start_lib_init,
+    search_json_sorted, search_query_parser,
+    search_result_copy_sort_values as copy_search_result_sort_values,
+    search_result_has_more as get_search_result_has_more,
+    search_result_sort_values_len as get_search_result_sort_values_len, set_error, start_lib_init,
+    SortedSearchField, SortedSearchValue,
 };
 use crate::tantivy_util::{
     add_schema_bytes_field, add_schema_date_field, add_schema_f64_field, add_schema_i64_field,
@@ -619,6 +623,45 @@ pub extern "C" fn context_search_json(
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_json_sorted(
+    context_ptr: *mut TantivyContext,
+    query_ptr: *const c_char,
+    sort_fields_ptr: *const SortedSearchField,
+    sort_fields_len: usize,
+    after_ptr: *const SortedSearchValue,
+    after_len: usize,
+    docs_limit: usize,
+    deadline_seconds: i64,
+    deadline_nanos: u32,
+    error_buffer: *mut *mut c_char,
+) -> *mut SearchResult {
+    let result = || -> Result<*mut SearchResult, TantivyGoError> {
+        let context = assert_pointer(context_ptr)?;
+        search_json_sorted(
+            query_ptr,
+            sort_fields_ptr,
+            sort_fields_len,
+            after_ptr,
+            after_len,
+            docs_limit,
+            deadline_seconds,
+            deadline_nanos,
+            context,
+        )
+    };
+
+    match result() {
+        Ok(search_result) => search_result,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            ptr::null_mut()
+        }
+    }
+}
+
 /// Performs a search and returns only fast field values (no full document loading).
 /// Returns the number of results found. Results are written to pre-allocated output arrays.
 #[logcall]
@@ -1166,6 +1209,67 @@ pub extern "C" fn search_result_get_size(
             set_error(&err.to_string(), error_buffer);
             0
         }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn search_result_get_has_more(
+    result_ptr: *mut SearchResult,
+    error_buffer: *mut *mut c_char,
+) -> bool {
+    let result = || -> Result<bool, TantivyGoError> {
+        let result = assert_pointer(result_ptr)?;
+        Ok(get_search_result_has_more(result))
+    };
+
+    match result() {
+        Ok(has_more) => has_more,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            false
+        }
+    }
+}
+
+#[logcall]
+#[no_mangle]
+pub extern "C" fn search_result_get_sort_values_len(
+    result_ptr: *mut SearchResult,
+    index: usize,
+    error_buffer: *mut *mut c_char,
+) -> usize {
+    let result = || -> Result<usize, TantivyGoError> {
+        let result = assert_pointer(result_ptr)?;
+        get_search_result_sort_values_len(result, index)
+    };
+
+    match result() {
+        Ok(len) => len,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            0
+        }
+    }
+}
+
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[logcall]
+#[no_mangle]
+pub extern "C" fn search_result_copy_sort_values(
+    result_ptr: *mut SearchResult,
+    index: usize,
+    values_ptr: *mut SortedSearchValue,
+    values_len: usize,
+    error_buffer: *mut *mut c_char,
+) {
+    let result = || -> Result<(), TantivyGoError> {
+        let result = assert_pointer(result_ptr)?;
+        copy_search_result_sort_values(result, index, values_ptr, values_len)
+    };
+
+    if let Err(err) = result() {
+        set_error(&err.to_string(), error_buffer);
     }
 }
 

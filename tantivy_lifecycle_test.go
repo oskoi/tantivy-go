@@ -237,7 +237,7 @@ func TestSchemaAndBuilderFreeAreIdempotent(t *testing.T) {
 	require.ErrorIs(t, err, ErrClosedSchema)
 }
 
-func TestToJsonWithNoIncludeFieldsReturnsAllFields(t *testing.T) {
+func TestToJSONWithNoIncludeFieldsReturnsAllFields(t *testing.T) {
 	tc := newLifecycleContext(t)
 	t.Cleanup(func() { require.NoError(t, tc.Close()) })
 
@@ -245,7 +245,7 @@ func TestToJsonWithNoIncludeFieldsReturnsAllFields(t *testing.T) {
 	require.NoError(t, doc.AddField("1", tc, "id"))
 	require.NoError(t, doc.AddField("hello", tc, "body"))
 
-	jsonStr, err := doc.ToJson(tc)
+	jsonStr, err := doc.ToJSON(tc)
 	require.NoError(t, err)
 	require.Contains(t, jsonStr, "id")
 	require.Contains(t, jsonStr, "body")

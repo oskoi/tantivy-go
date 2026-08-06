@@ -422,8 +422,7 @@ where
         });
     }
 
-    let size = documents.len();
-    Ok(Box::into_raw(Box::new(SearchResult { documents, size })))
+    Ok(Box::into_raw(Box::new(SearchResult::new(documents))))
 }
 
 pub fn search(

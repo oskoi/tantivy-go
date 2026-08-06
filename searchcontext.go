@@ -77,10 +77,10 @@ func (b *SearchContextBuilder) SetQuery(query string) *SearchContextBuilder {
 	return b
 }
 
-// SetQueryFromJson sets the query for searchContext.
-func (b *SearchContextBuilder) SetQueryFromJson(query *FinalQuery) *SearchContextBuilder {
-	queryJson, _ := json.Marshal(query)
-	b.context.query = string(queryJson)
+// SetQueryFromJSON sets the query for searchContext.
+func (b *SearchContextBuilder) SetQueryFromJSON(query *FinalQuery) *SearchContextBuilder {
+	queryJSON, _ := json.Marshal(query)
+	b.context.query = string(queryJSON)
 	return b
 }
 

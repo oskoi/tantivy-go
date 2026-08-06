@@ -175,13 +175,13 @@ func Test(t *testing.T) {
 			Build()
 
 		sCtx := tantivy_go.NewSearchContextBuilder().
-			SetQueryFromJson(&build).
+			SetQueryFromJSON(&build).
 			SetDocsLimit(100).
 			SetWithHighlights(false).
 			AddFieldDefaultWeight(NameTitle).
 			Build()
 
-		result, err := tc.SearchJson(sCtx)
+		result, err := tc.SearchJSON(sCtx)
 		require.NoError(t, err)
 
 		size, err := result.GetSize()
@@ -701,7 +701,7 @@ func Test(t *testing.T) {
 		require.NoError(t, err)
 
 		sCtx := tantivy_go.NewSearchContextBuilder().
-			SetQueryFromJson(&finalQuery).
+			SetQueryFromJSON(&finalQuery).
 			SetDocsLimit(100).
 			SetWithHighlights(false).
 			Build()
@@ -728,12 +728,12 @@ func Test(t *testing.T) {
 			Build()
 
 		sCtx := tantivy_go.NewSearchContextBuilder().
-			SetQueryFromJson(&finalQuery).
+			SetQueryFromJSON(&finalQuery).
 			SetDocsLimit(100).
 			SetWithHighlights(false).
 			Build()
 
-		result, err := tc.SearchJson(sCtx)
+		result, err := tc.SearchJSON(sCtx)
 		require.NoError(t, err)
 
 		size, err := result.GetSize()
@@ -791,7 +791,7 @@ func Test(t *testing.T) {
 		require.Equal(t, 2, int(size))
 		resDoc, err := result.Get(0)
 		require.NoError(t, err)
-		jsonStr, err := resDoc.ToJson(tc, NameId)
+		jsonStr, err := resDoc.ToJSON(tc, NameId)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"highlights":[],"id":"id1","score":6.886753559112549}`, jsonStr)
 
@@ -810,7 +810,7 @@ func Test(t *testing.T) {
 		require.Equal(t, 2, int(size2))
 		resDoc2, err := result2.Get(0)
 		require.NoError(t, err)
-		jsonStr2, err := resDoc2.ToJson(tc, NameId)
+		jsonStr2, err := resDoc2.ToJSON(tc, NameId)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"highlights":[],"id":"id2","score":49.19108963012695}`, jsonStr2)
 	})
@@ -845,12 +845,12 @@ func Test(t *testing.T) {
 			Build()
 
 		sCtx := tantivy_go.NewSearchContextBuilder().
-			SetQueryFromJson(&finalQuery).
+			SetQueryFromJSON(&finalQuery).
 			SetDocsLimit(100).
 			SetWithHighlights(false).
 			Build()
 
-		result, err := tc.SearchJson(sCtx)
+		result, err := tc.SearchJSON(sCtx)
 		require.NoError(t, err)
 
 		size, err := result.GetSize()
@@ -885,12 +885,12 @@ func Test(t *testing.T) {
 			Build()
 
 		sCtx := tantivy_go.NewSearchContextBuilder().
-			SetQueryFromJson(&finalQuery).
+			SetQueryFromJSON(&finalQuery).
 			SetDocsLimit(100).
 			SetWithHighlights(false).
 			Build()
 
-		result, err := tc.SearchJson(sCtx)
+		result, err := tc.SearchJSON(sCtx)
 		require.NoError(t, err)
 
 		size, err := result.GetSize()
@@ -899,7 +899,7 @@ func Test(t *testing.T) {
 
 		resDoc, err := result.Get(0)
 		require.NoError(t, err)
-		jsonStr, err := resDoc.ToJson(tc, NameId)
+		jsonStr, err := resDoc.ToJSON(tc, NameId)
 		require.NoError(t, err)
 		require.Contains(t, jsonStr, `"id":"id3"`)
 	})
@@ -924,12 +924,12 @@ func Test(t *testing.T) {
 			Build()
 
 		sCtx := tantivy_go.NewSearchContextBuilder().
-			SetQueryFromJson(&finalQuery).
+			SetQueryFromJSON(&finalQuery).
 			SetDocsLimit(100).
 			SetWithHighlights(false).
 			Build()
 
-		result, err := tc.SearchJson(sCtx)
+		result, err := tc.SearchJSON(sCtx)
 		require.NoError(t, err)
 
 		size, err := result.GetSize()
@@ -938,7 +938,7 @@ func Test(t *testing.T) {
 
 		resDoc, err := result.Get(0)
 		require.NoError(t, err)
-		jsonStr, err := resDoc.ToJson(tc, NameId)
+		jsonStr, err := resDoc.ToJSON(tc, NameId)
 		require.NoError(t, err)
 		// Score should be boosted (2.5 * 1.0 = 2.5)
 		require.Contains(t, jsonStr, `"score":2.5`)
@@ -1072,11 +1072,11 @@ func Test(t *testing.T) {
 			Build()
 
 		sCtx := tantivy_go.NewSearchContextBuilder().
-			SetQueryFromJson(&finalQuery).
+			SetQueryFromJSON(&finalQuery).
 			SetWithHighlights(false).
 			Build()
 
-		result, err := tc.SearchFastFieldJson(sCtx, NameId)
+		result, err := tc.SearchFastFieldJSON(sCtx, NameId)
 		require.Error(t, err)
 		require.Nil(t, result)
 		require.Equal(t, "docsLimit must be greater than 0", err.Error())
@@ -1102,12 +1102,12 @@ func Test(t *testing.T) {
 			Build()
 
 		sCtx := tantivy_go.NewSearchContextBuilder().
-			SetQueryFromJson(&finalQuery).
+			SetQueryFromJSON(&finalQuery).
 			SetDocsLimit(100).
 			SetWithHighlights(false).
 			Build()
 
-		result, err := tc.SearchFastFieldJson(sCtx, NameId)
+		result, err := tc.SearchFastFieldJSON(sCtx, NameId)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Equal(t, 0, len(result.Values))

@@ -104,7 +104,7 @@ func TestNumericFields(t *testing.T) {
 	doc, err := result.Get(0)
 	require.NoError(t, err)
 
-	jsonStr, err := doc.ToJson(tc, "id", "count", "temperature", "score")
+	jsonStr, err := doc.ToJSON(tc, "id", "count", "temperature", "score")
 	require.NoError(t, err)
 
 	// Verify the document contains our numeric values

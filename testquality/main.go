@@ -25,7 +25,7 @@ type Query struct {
 func main() {
 	const indexPath = "tantivy_index"
 	const jsonQueries = "queries.json"
-	var searchFunc = searchJson // or searchTantivy for the default search
+	var searchFunc = searchJSON // or searchTantivy for the default search
 	const k = 100
 
 	err := execute(indexPath, jsonQueries, searchFunc, k)
@@ -189,7 +189,7 @@ func escape(qry string) string {
 	return replacer.Replace(qry)
 }
 
-func searchJson(
+func searchJSON(
 	qry string,
 	index *tantivy_go.TantivyContext,
 	schema *tantivy_go.Schema,
@@ -207,12 +207,12 @@ func searchJson(
 		Build()
 
 	sCtx := tantivy_go.NewSearchContextBuilder().
-		SetQueryFromJson(&finalQuery).
+		SetQueryFromJSON(&finalQuery).
 		SetDocsLimit(k).
 		SetWithHighlights(false).
 		Build()
 
-	result, err := index.SearchJson(sCtx)
+	result, err := index.SearchJSON(sCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search index: %w", err)
 	}

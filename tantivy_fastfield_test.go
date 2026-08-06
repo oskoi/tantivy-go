@@ -110,27 +110,27 @@ func TestSearchFastFieldTypedRejectsMismatchedFieldWeights(t *testing.T) {
 	require.ErrorContains(t, err, "fieldNames and weights length mismatch")
 }
 
-func TestSearchFastFieldTypedJsonValues(t *testing.T) {
+func TestSearchFastFieldTypedJSONValues(t *testing.T) {
 	tc, ts := newTypedFastFieldContext(t)
 
 	query := tantivy_go.NewQueryBuilder().
 		Query(tantivy_go.Must, "title", "alpha", tantivy_go.TermQuery, 1).
 		Build()
 	sCtx := tantivy_go.NewSearchContextBuilder().
-		SetQueryFromJson(&query).
+		SetQueryFromJSON(&query).
 		SetDocsLimit(10).
 		Build()
 
-	u64Result, err := tc.SearchFastFieldU64Json(sCtx, "u64v")
+	u64Result, err := tc.SearchFastFieldU64JSON(sCtx, "u64v")
 	requireTypedFastFieldResult(t, u64Result, err, uint64(42))
 
-	i64Result, err := tc.SearchFastFieldI64Json(sCtx, "i64v")
+	i64Result, err := tc.SearchFastFieldI64JSON(sCtx, "i64v")
 	requireTypedFastFieldResult(t, i64Result, err, int64(-7))
 
-	f64Result, err := tc.SearchFastFieldF64Json(sCtx, "f64v")
+	f64Result, err := tc.SearchFastFieldF64JSON(sCtx, "f64v")
 	requireTypedFastFieldResult(t, f64Result, err, 3.5)
 
-	dateResult, err := tc.SearchFastFieldDateJson(sCtx, "datev")
+	dateResult, err := tc.SearchFastFieldDateJSON(sCtx, "datev")
 	requireTypedFastFieldResult(t, dateResult, err, ts)
 }
 

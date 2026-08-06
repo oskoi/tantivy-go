@@ -146,7 +146,7 @@ func TestDateFields(t *testing.T) {
 	doc, err := result.Get(0)
 	require.NoError(t, err)
 
-	jsonStr, err := doc.ToJson(tc, "title", "created_at")
+	jsonStr, err := doc.ToJSON(tc, "title", "created_at")
 	require.NoError(t, err)
 	require.Contains(t, jsonStr, "Recent Document")
 	// The date should be stored as timestamp in milliseconds

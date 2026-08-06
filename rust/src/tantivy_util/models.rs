@@ -1,3 +1,4 @@
+use crate::c_util::sorted_search::SortTuple;
 use serde::Serialize;
 use tantivy::{Index, IndexReader, IndexWriter, TantivyDocument};
 
@@ -44,4 +45,41 @@ pub struct Fragment {
 pub struct SearchResult {
     pub documents: Vec<Document>,
     pub size: usize,
+    sort_tuples: Option<Vec<SortTuple>>,
+    has_more: bool,
+}
+
+impl SearchResult {
+    pub(crate) fn new(documents: Vec<Document>) -> Self {
+        let size = documents.len();
+        Self {
+            documents,
+            size,
+            sort_tuples: None,
+            has_more: false,
+        }
+    }
+
+    pub(crate) fn new_sorted(
+        documents: Vec<Document>,
+        sort_tuples: Vec<SortTuple>,
+        has_more: bool,
+    ) -> Self {
+        debug_assert_eq!(documents.len(), sort_tuples.len());
+        let size = documents.len();
+        Self {
+            documents,
+            size,
+            sort_tuples: Some(sort_tuples),
+            has_more,
+        }
+    }
+
+    pub(crate) fn has_more(&self) -> bool {
+        self.has_more
+    }
+
+    pub(crate) fn sort_tuples(&self) -> Option<&[SortTuple]> {
+        self.sort_tuples.as_deref()
+    }
 }

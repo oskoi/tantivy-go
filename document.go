@@ -201,7 +201,7 @@ func (d *Document) AddJSONField(value string, tc *TantivyContext, fieldName stri
 	return tryExtractError(errBuffer)
 }
 
-// ToJson converts the document to its JSON representation based on the provided schema.
+// ToJSON converts the document to its JSON representation based on the provided schema.
 // Optionally, specific fields can be included in the JSON output.
 //
 // Parameters:
@@ -211,7 +211,7 @@ func (d *Document) AddJSONField(value string, tc *TantivyContext, fieldName stri
 // Returns:
 //   - string: the JSON representation of the document
 //   - error: an error if the conversion fails, or nil if the operation is successful
-func (d *Document) ToJson(tc *TantivyContext, includeFields ...string) (string, error) {
+func (d *Document) ToJSON(tc *TantivyContext, includeFields ...string) (string, error) {
 	if err := d.ensureOpen(); err != nil {
 		return "", err
 	}
@@ -255,7 +255,7 @@ func (d *Document) ToJson(tc *TantivyContext, includeFields ...string) (string, 
 //   - T: the model of type T resulting from the conversion
 //   - error: an error if the conversion fails, or nil if the operation is successful
 func ToModel[T any](doc *Document, tc *TantivyContext, includeFields []string, f func(json string) (T, error)) (T, error) {
-	json, err := doc.ToJson(tc, includeFields...)
+	json, err := doc.ToJSON(tc, includeFields...)
 	if err != nil {
 		var zero T
 		return zero, err

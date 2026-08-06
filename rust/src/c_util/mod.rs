@@ -1,5 +1,12 @@
+pub(crate) mod sorted_search;
 mod util;
 
+pub use self::sorted_search::search_json_sorted;
+pub use self::sorted_search::search_result_copy_sort_values;
+pub use self::sorted_search::search_result_has_more;
+pub use self::sorted_search::search_result_sort_values_len;
+pub use self::sorted_search::SortedSearchField;
+pub use self::sorted_search::SortedSearchValue;
 pub use self::util::add_and_consume_documents;
 pub use self::util::add_bytes_field;
 pub use self::util::add_date_field;
