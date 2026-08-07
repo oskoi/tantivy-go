@@ -1,7 +1,6 @@
 pub(crate) mod sorted_search;
 mod util;
 
-pub use self::sorted_search::search_json_sorted;
 pub use self::sorted_search::search_result_copy_sort_values;
 pub use self::sorted_search::search_result_has_more;
 pub use self::sorted_search::search_result_sort_values_len;

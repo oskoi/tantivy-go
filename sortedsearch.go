@@ -50,13 +50,25 @@ type SortValue struct {
 	Bool    bool
 }
 
-// SortedSearchRequest performs a filter-only JSON search ordered by Sort.
-type SortedSearchRequest struct {
-	QueryJSON string
-	Limit     int
-	Sort      []SortField
-	After     []SortValue
-	Timeout   time.Duration
+// SortedQueryRequest performs a filter-only Tantivy query-language search ordered by Sort.
+type SortedQueryRequest struct {
+	Query   string
+	Limit   int
+	Sort    []SortField
+	After   []SortValue
+	Timeout time.Duration
+}
+
+// SearchQuerySorted runs a Tantivy query-language search without relevance scoring and returns at
+// most Limit documents ordered by the requested fast-field tuple.
+func (tc *TantivyContext) SearchQuerySorted(request SortedQueryRequest) (*SearchResult, error) {
+	return tc.searchSorted(sortedQueryRequest{
+		query:   request.Query,
+		limit:   request.Limit,
+		sort:    request.Sort,
+		after:   request.After,
+		timeout: request.Timeout,
+	})
 }
 
 const (
@@ -64,27 +76,38 @@ const (
 	maxSortedSearchLimit      = 10_000
 )
 
-func validateSortedSearchRequest(request SortedSearchRequest) error {
-	if request.Limit <= 0 {
+type sortedQueryRequest struct {
+	query   string
+	limit   int
+	sort    []SortField
+	after   []SortValue
+	timeout time.Duration
+}
+
+func validateSortedQueryRequest(request sortedQueryRequest) error {
+	if request.limit <= 0 {
 		return fmt.Errorf("sorted search limit: %w", ErrInvalidDocsLimit)
 	}
-	if request.Limit > maxSortedSearchLimit {
+	if request.limit > maxSortedSearchLimit {
 		return fmt.Errorf("sorted search limit must not exceed %d", maxSortedSearchLimit)
 	}
-	if request.Timeout <= 0 {
+	if request.timeout <= 0 {
 		return errors.New("sorted search timeout must be greater than zero")
 	}
-	if strings.IndexByte(request.QueryJSON, 0) >= 0 {
-		return errors.New("sorted search query JSON contains a NUL byte")
+	if request.query == "" {
+		return errors.New("sorted search query must not be empty")
 	}
-	if len(request.Sort) == 0 || len(request.Sort) > 4 {
+	if strings.IndexByte(request.query, 0) >= 0 {
+		return errors.New("sorted search query contains a NUL byte")
+	}
+	if len(request.sort) == 0 || len(request.sort) > 4 {
 		return errors.New("sorted search requires between one and four sort fields")
 	}
-	if len(request.After) != 0 && len(request.After) != len(request.Sort) {
+	if len(request.after) != 0 && len(request.after) != len(request.sort) {
 		return errors.New("sorted search after tuple length must match sort fields")
 	}
 
-	for index, field := range request.Sort {
+	for index, field := range request.sort {
 		if field.Name == "" {
 			return fmt.Errorf("sorted search field %d has an empty name", index)
 		}
@@ -95,7 +118,7 @@ func validateSortedSearchRequest(request SortedSearchRequest) error {
 			return fmt.Errorf("sorted search field %d has an invalid direction", index)
 		}
 	}
-	for index, value := range request.After {
+	for index, value := range request.after {
 		if err := validateSortValue(value); err != nil {
 			return fmt.Errorf("sorted search after value %d: %w", index, err)
 		}
@@ -148,8 +171,8 @@ type sortedSearchDescriptors struct {
 	free   func()
 }
 
-func newSortedSearchDescriptors(request SortedSearchRequest) (sortedSearchDescriptors, error) {
-	allocated := make([]unsafe.Pointer, 0, len(request.Sort)+len(request.After))
+func newSortedSearchDescriptors(request sortedQueryRequest) (sortedSearchDescriptors, error) {
+	allocated := make([]unsafe.Pointer, 0, len(request.sort)+len(request.after))
 	free := func() {
 		for _, pointer := range allocated {
 			C.free(pointer)
@@ -161,11 +184,11 @@ func newSortedSearchDescriptors(request SortedSearchRequest) (sortedSearchDescri
 	}
 
 	descriptors := sortedSearchDescriptors{
-		fields: make([]C.SortedSearchField, len(request.Sort)),
-		after:  make([]C.SortedSearchValue, len(request.After)),
+		fields: make([]C.SortedSearchField, len(request.sort)),
+		after:  make([]C.SortedSearchValue, len(request.after)),
 		free:   free,
 	}
-	for index, field := range request.Sort {
+	for index, field := range request.sort {
 		name := C.CString(field.Name)
 		if name == nil {
 			return fail(errors.New("allocate sorted search field name"))
@@ -176,7 +199,7 @@ func newSortedSearchDescriptors(request SortedSearchRequest) (sortedSearchDescri
 			direction: C.uint8_t(field.Direction),
 		}
 	}
-	for index, value := range request.After {
+	for index, value := range request.after {
 		cValue := C.SortedSearchValue{
 			kind:       C.uint8_t(value.Kind),
 			missing:    C.bool(value.Missing),
@@ -199,14 +222,12 @@ func newSortedSearchDescriptors(request SortedSearchRequest) (sortedSearchDescri
 	return descriptors, nil
 }
 
-// SearchJSONSorted runs a JSON query without relevance scoring and returns at
-// most Limit documents ordered by the requested fast-field tuple.
-func (tc *TantivyContext) SearchJSONSorted(request SortedSearchRequest) (*SearchResult, error) {
-	if err := validateSortedSearchRequest(request); err != nil {
+func (tc *TantivyContext) searchSorted(request sortedQueryRequest) (*SearchResult, error) {
+	if err := validateSortedQueryRequest(request); err != nil {
 		return nil, err
 	}
 
-	deadline := time.Now().Add(request.Timeout)
+	deadline := time.Now().Add(request.timeout)
 
 	descriptors, err := newSortedSearchDescriptors(request)
 	if err != nil {
@@ -214,7 +235,7 @@ func (tc *TantivyContext) SearchJSONSorted(request SortedSearchRequest) (*Search
 	}
 	defer descriptors.free()
 
-	query, freeQuery := newCString(request.QueryJSON)
+	query, freeQuery := newCString(request.query)
 	defer freeQuery()
 
 	ptr, unlock, err := tc.lockNative()
@@ -224,28 +245,33 @@ func (tc *TantivyContext) SearchJSONSorted(request SortedSearchRequest) (*Search
 	defer unlock()
 
 	var errBuffer *C.char
-	result := C.context_search_json_sorted(
+	result := C.context_search_query_sorted(
 		ptr,
 		query,
 		&descriptors.fields[0],
 		C.uintptr_t(len(descriptors.fields)),
 		cSortedSearchAfterPointer(descriptors.after),
 		C.uintptr_t(len(descriptors.after)),
-		C.uintptr_t(request.Limit),
+		C.uintptr_t(request.limit),
 		C.int64_t(deadline.Unix()),
 		C.uint32_t(deadline.Nanosecond()),
 		&errBuffer,
 	)
 	if result == nil {
-		if nativeErr := tryExtractError(errBuffer); nativeErr != nil {
-			if nativeErr.Error() == nativeSortedSearchTimeout {
-				return nil, ErrSearchTimeout
-			}
-			return nil, fmt.Errorf("search JSON sorted: %w", nativeErr)
-		}
-		return nil, errors.New("search JSON sorted result is nil")
+		return nil, sortedSearchError(errBuffer)
 	}
 	return &SearchResult{ptr: result}, nil
+}
+
+func sortedSearchError(errBuffer *C.char) error {
+	const operation = "search query sorted"
+	if nativeErr := tryExtractError(errBuffer); nativeErr != nil {
+		if nativeErr.Error() == nativeSortedSearchTimeout {
+			return ErrSearchTimeout
+		}
+		return fmt.Errorf("%s: %w", operation, nativeErr)
+	}
+	return errors.New(operation + " result is nil")
 }
 
 func cSortedSearchAfterPointer(values []C.SortedSearchValue) *C.SortedSearchValue {

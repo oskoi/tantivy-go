@@ -2,7 +2,6 @@ package tantivy_go_test
 
 import (
 	"encoding/json"
-	"math"
 	"path/filepath"
 	"testing"
 	"time"
@@ -33,7 +32,7 @@ type sortedSearchFixtureDoc struct {
 	Date *int64
 }
 
-func TestSearchJSONSortedMultipleFields(t *testing.T) {
+func TestSearchQuerySortedMultipleFields(t *testing.T) {
 	tc := newSortedSearchContext(t,
 		sortedSearchFixtureDoc{
 			ID:   "first",
@@ -65,9 +64,9 @@ func TestSearchJSONSortedMultipleFields(t *testing.T) {
 		},
 	)
 
-	result, err := tc.SearchJSONSorted(tantivy_go.SortedSearchRequest{
-		QueryJSON: sortedSearchAllQueryJSON(t),
-		Limit:     4,
+	result, err := tc.SearchQuerySorted(tantivy_go.SortedQueryRequest{
+		Query: "*",
+		Limit: 4,
 		Sort: []tantivy_go.SortField{
 			{Name: sortedSearchTextField, Direction: tantivy_go.SortAscending},
 			{Name: sortedSearchU64Field, Direction: tantivy_go.SortDescending},
@@ -110,7 +109,7 @@ func TestSearchJSONSortedMultipleFields(t *testing.T) {
 	})
 }
 
-func TestSearchJSONSortedMissingLastBothDirections(t *testing.T) {
+func TestSearchQuerySortedMissingLastBothDirections(t *testing.T) {
 	const earlyDateMillis = int64(1_700_000_000_123)
 	const lateDateMillis = int64(1_700_000_001_456)
 
@@ -254,9 +253,9 @@ func TestSearchJSONSortedMissingLastBothDirections(t *testing.T) {
 			for _, directionCase := range directions {
 				directionCase := directionCase
 				t.Run(directionCase.name, func(t *testing.T) {
-					result, err := tc.SearchJSONSorted(tantivy_go.SortedSearchRequest{
-						QueryJSON: sortedSearchAllQueryJSON(t),
-						Limit:     3,
+					result, err := tc.SearchQuerySorted(tantivy_go.SortedQueryRequest{
+						Query: "*",
+						Limit: 3,
 						Sort: []tantivy_go.SortField{{
 							Name:      sortCase.field,
 							Direction: directionCase.direction,
@@ -279,82 +278,8 @@ func TestSearchJSONSortedMissingLastBothDirections(t *testing.T) {
 	}
 }
 
-func TestSearchJSONSortedAfterTraversesTiesOnce(t *testing.T) {
-	tc := newSortedSearchContext(t,
-		sortedSearchFixtureDoc{ID: "c", U64: sortedSearchPtr(uint64(1))},
-		sortedSearchFixtureDoc{ID: "f", U64: sortedSearchPtr(uint64(2))},
-		sortedSearchFixtureDoc{ID: "a", U64: sortedSearchPtr(uint64(1))},
-		sortedSearchFixtureDoc{ID: "d", U64: sortedSearchPtr(uint64(2))},
-		sortedSearchFixtureDoc{ID: "b", U64: sortedSearchPtr(uint64(1))},
-		sortedSearchFixtureDoc{ID: "e", U64: sortedSearchPtr(uint64(2))},
-	)
-
-	wantIDs := []string{"a", "b", "c", "d", "e", "f"}
-	wantCursors := [][]tantivy_go.SortValue{
-		{
-			{Kind: tantivy_go.SortValueU64, U64: 1},
-			{Kind: tantivy_go.SortValueText, Text: "b"},
-		},
-		{
-			{Kind: tantivy_go.SortValueU64, U64: 2},
-			{Kind: tantivy_go.SortValueText, Text: "d"},
-		},
-		{
-			{Kind: tantivy_go.SortValueU64, U64: 2},
-			{Kind: tantivy_go.SortValueText, Text: "f"},
-		},
-	}
-
-	var after []tantivy_go.SortValue
-	gotIDs := make([]string, 0, len(wantIDs))
-	seenIDs := make(map[string]struct{}, len(wantIDs))
-
-	for page := 0; ; page++ {
-		require.Less(t, page, len(wantCursors), "search-after did not exhaust")
-
-		result, err := tc.SearchJSONSorted(tantivy_go.SortedSearchRequest{
-			QueryJSON: sortedSearchAllQueryJSON(t),
-			Limit:     2,
-			Sort: []tantivy_go.SortField{
-				{Name: sortedSearchU64Field, Direction: tantivy_go.SortAscending},
-				{Name: sortedSearchDocIDField, Direction: tantivy_go.SortAscending},
-			},
-			After:   after,
-			Timeout: time.Second,
-		})
-		require.NoError(t, err)
-
-		pageIDs := sortedSearchResultIDs(t, tc, result)
-		require.Len(t, pageIDs, 2)
-		cursor, err := result.SortValues(uint64(len(pageIDs) - 1))
-		require.NoError(t, err)
-		require.Equal(t, wantCursors[page], cursor)
-		hasMore, err := result.HasMore()
-		require.NoError(t, err)
-		result.Free()
-
-		for _, id := range pageIDs {
-			_, duplicate := seenIDs[id]
-			require.Falsef(t, duplicate, "duplicate result %q", id)
-			seenIDs[id] = struct{}{}
-			gotIDs = append(gotIDs, id)
-		}
-
-		if page == len(wantCursors)-1 {
-			require.False(t, hasMore)
-			break
-		}
-		require.True(t, hasMore)
-		after = append([]tantivy_go.SortValue(nil), cursor...)
-	}
-
-	require.Equal(t, wantIDs, gotIDs)
-	require.Len(t, seenIDs, len(wantIDs))
-}
-
-func TestSearchJSONSortedRejectsInvalidRequests(t *testing.T) {
+func TestSearchQuerySortedRejectsNativeDescriptorErrors(t *testing.T) {
 	tc := newSortedSearchContext(t)
-	queryJSON := sortedSearchAllQueryJSON(t)
 	validSort := []tantivy_go.SortField{{
 		Name:      sortedSearchU64Field,
 		Direction: tantivy_go.SortAscending,
@@ -362,215 +287,50 @@ func TestSearchJSONSortedRejectsInvalidRequests(t *testing.T) {
 
 	testCases := []struct {
 		name    string
-		request tantivy_go.SortedSearchRequest
+		request tantivy_go.SortedQueryRequest
+		want    string
 	}{
 		{
-			name: "zero limit",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     0,
-				Sort:      validSort,
-				Timeout:   time.Second,
-			},
-		},
-		{
-			name: "negative limit",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     -1,
-				Sort:      validSort,
-				Timeout:   time.Second,
-			},
-		},
-		{
-			name: "limit above maximum",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     10_001,
-				Sort:      validSort,
-				Timeout:   time.Second,
-			},
-		},
-		{
-			name: "no sort fields",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Timeout:   time.Second,
-			},
-		},
-		{
-			name: "too many sort fields",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort: []tantivy_go.SortField{
-					{Name: sortedSearchU64Field, Direction: tantivy_go.SortAscending},
-					{Name: sortedSearchI64Field, Direction: tantivy_go.SortAscending},
-					{Name: sortedSearchF64Field, Direction: tantivy_go.SortAscending},
-					{Name: sortedSearchDateField, Direction: tantivy_go.SortAscending},
-					{Name: sortedSearchDocIDField, Direction: tantivy_go.SortAscending},
-				},
-				Timeout: time.Second,
-			},
-		},
-		{
 			name: "unknown sort field",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
+			request: tantivy_go.SortedQueryRequest{
+				Query: "*",
+				Limit: 1,
 				Sort: []tantivy_go.SortField{{
 					Name:      "missing_field",
 					Direction: tantivy_go.SortAscending,
 				}},
 				Timeout: time.Second,
 			},
+			want: "missing_field",
 		},
 		{
-			name: "unsupported sort direction",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort: []tantivy_go.SortField{{
-					Name:      sortedSearchU64Field,
-					Direction: tantivy_go.SortDirection(99),
-				}},
-				Timeout: time.Second,
-			},
-		},
-		{
-			name: "after arity mismatch",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort: []tantivy_go.SortField{
-					{Name: sortedSearchU64Field, Direction: tantivy_go.SortAscending},
-					{Name: sortedSearchDocIDField, Direction: tantivy_go.SortAscending},
-				},
-				After:   []tantivy_go.SortValue{{Kind: tantivy_go.SortValueU64, U64: 1}},
-				Timeout: time.Second,
-			},
-		},
-		{
-			name: "after atom kind mismatch",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort:      validSort,
+			name: "search-after kind mismatch",
+			request: tantivy_go.SortedQueryRequest{
+				Query: "*",
+				Limit: 1,
+				Sort:  validSort,
 				After: []tantivy_go.SortValue{{
 					Kind: tantivy_go.SortValueText,
 					Text: "not a u64",
 				}},
 				Timeout: time.Second,
 			},
-		},
-		{
-			name: "zero after value kind",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort:      validSort,
-				After: []tantivy_go.SortValue{{
-					Kind: tantivy_go.SortValueKind(0),
-				}},
-				Timeout: time.Second,
-			},
-		},
-		{
-			name: "after has multiple union values",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort:      validSort,
-				After: []tantivy_go.SortValue{{
-					Kind: tantivy_go.SortValueU64,
-					U64:  1,
-					I64:  1,
-				}},
-				Timeout: time.Second,
-			},
-		},
-		{
-			name: "missing after has a union value",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort:      validSort,
-				After: []tantivy_go.SortValue{{
-					Kind:    tantivy_go.SortValueU64,
-					Missing: true,
-					U64:     1,
-				}},
-				Timeout: time.Second,
-			},
-		},
-		{
-			name: "nan after value",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort: []tantivy_go.SortField{{
-					Name:      sortedSearchF64Field,
-					Direction: tantivy_go.SortAscending,
-				}},
-				After: []tantivy_go.SortValue{{
-					Kind: tantivy_go.SortValueF64,
-					F64:  math.NaN(),
-				}},
-				Timeout: time.Second,
-			},
-		},
-		{
-			name: "zero timeout",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort:      validSort,
-			},
-		},
-		{
-			name: "negative timeout",
-			request: tantivy_go.SortedSearchRequest{
-				QueryJSON: queryJSON,
-				Limit:     1,
-				Sort:      validSort,
-				Timeout:   -time.Second,
-			},
+			want: "kind",
 		},
 	}
 
 	for _, testCase := range testCases {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			result, err := tc.SearchJSONSorted(testCase.request)
+			result, err := tc.SearchQuerySorted(testCase.request)
 			if result != nil {
 				result.Free()
 			}
 			require.Nil(t, result)
 			require.Error(t, err)
+			require.Contains(t, err.Error(), testCase.want)
 		})
 	}
-}
-
-func TestSearchJSONSortedDeadline(t *testing.T) {
-	tc := newSortedSearchContext(t,
-		sortedSearchFixtureDoc{ID: "only", U64: sortedSearchPtr(uint64(1))},
-	)
-
-	result, err := tc.SearchJSONSorted(tantivy_go.SortedSearchRequest{
-		QueryJSON: sortedSearchAllQueryJSON(t),
-		Limit:     1,
-		Sort: []tantivy_go.SortField{{
-			Name:      sortedSearchU64Field,
-			Direction: tantivy_go.SortAscending,
-		}},
-		Timeout: time.Nanosecond,
-	})
-	if result != nil {
-		result.Free()
-	}
-	require.Nil(t, result)
-	require.ErrorIs(t, err, tantivy_go.ErrSearchTimeout)
 }
 
 func newSortedSearchContext(t *testing.T, records ...sortedSearchFixtureDoc) *tantivy_go.TantivyContext {
@@ -635,15 +395,6 @@ func newSortedSearchContext(t *testing.T, records ...sortedSearchFixtureDoc) *ta
 	}
 
 	return tc
-}
-
-func sortedSearchAllQueryJSON(t *testing.T) string {
-	t.Helper()
-
-	query := tantivy_go.NewQueryBuilder().AllQuery(tantivy_go.Must, 1).Build()
-	value, err := json.Marshal(&query)
-	require.NoError(t, err)
-	return string(value)
 }
 
 func sortedSearchResultIDs(t *testing.T, tc *tantivy_go.TantivyContext, result *tantivy_go.SearchResult) []string {

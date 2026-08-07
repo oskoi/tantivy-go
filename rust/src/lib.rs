@@ -5,6 +5,7 @@ use std::ptr;
 use tantivy::schema::*;
 use tantivy::{indexer::UserOperation, Opstamp, Term};
 
+use crate::c_util::sorted_search::search_query_sorted;
 use crate::c_util::{
     add_and_consume_documents, add_bytes_field, add_date_field, add_f64_field, add_field,
     add_fields, add_i64_field, add_json_field, add_u64_field, assert_pointer, assert_str,
@@ -13,8 +14,7 @@ use crate::c_util::{
     search_fast_field_date, search_fast_field_date_json, search_fast_field_f64,
     search_fast_field_f64_json, search_fast_field_i64, search_fast_field_i64_json,
     search_fast_field_json, search_fast_field_u64, search_fast_field_u64_json, search_json,
-    search_json_sorted, search_query_parser,
-    search_result_copy_sort_values as copy_search_result_sort_values,
+    search_query_parser, search_result_copy_sort_values as copy_search_result_sort_values,
     search_result_has_more as get_search_result_has_more,
     search_result_sort_values_len as get_search_result_sort_values_len, set_error, start_lib_init,
     SortedSearchField, SortedSearchValue,
@@ -626,7 +626,7 @@ pub extern "C" fn context_search_json(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[logcall]
 #[no_mangle]
-pub extern "C" fn context_search_json_sorted(
+pub extern "C" fn context_search_query_sorted(
     context_ptr: *mut TantivyContext,
     query_ptr: *const c_char,
     sort_fields_ptr: *const SortedSearchField,
@@ -640,7 +640,7 @@ pub extern "C" fn context_search_json_sorted(
 ) -> *mut SearchResult {
     let result = || -> Result<*mut SearchResult, TantivyGoError> {
         let context = assert_pointer(context_ptr)?;
-        search_json_sorted(
+        search_query_sorted(
             query_ptr,
             sort_fields_ptr,
             sort_fields_len,

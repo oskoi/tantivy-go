@@ -1,5 +1,4 @@
 use crate::c_util::util::assert_string;
-use crate::queries::parse_query_from_json;
 use crate::tantivy_util::{Document, SearchResult, TantivyContext, TantivyGoError};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -7,10 +6,11 @@ use std::ffi::c_char;
 use std::slice;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tantivy::columnar::{Column, ColumnIndex, ColumnType, StrColumn};
-use tantivy::query::{EnableScoring, Query};
+use tantivy::query::{EnableScoring, Query, QueryParser};
 use tantivy::schema::FieldType;
 use tantivy::{
-    DateTime, DocAddress, DocId, DocSet, Searcher, SegmentReader, TantivyDocument, TERMINATED,
+    DateTime, DocAddress, DocId, DocSet, Index, Searcher, SegmentReader, TantivyDocument,
+    TERMINATED,
 };
 
 pub const SEARCH_TIMEOUT_ERROR: &str = "tantivy-go sorted search deadline exceeded";
@@ -22,7 +22,7 @@ const DEADLINE_CHECK_INTERVAL: usize = 1_024;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct SortedSearchField {
-    /// Input field-name bytes are borrowed only for `context_search_json_sorted`;
+    /// Input field-name bytes are borrowed only for `context_search_query_sorted`;
     /// they remain caller-owned and must not be retained.
     pub name_ptr: *const c_char,
     pub direction: u8,
@@ -34,8 +34,9 @@ pub struct SortedSearchValue {
     pub kind: u8,
     pub missing: bool,
     /// For input cursors, text bytes are borrowed only for
-    /// `context_search_json_sorted` and remain caller-owned. For output tuples,
-    /// this borrows `SearchResult` storage until `search_result_free`; Go copies it first.
+    /// `context_search_query_sorted`; they remain caller-owned.
+    /// For output tuples, this borrows `SearchResult` storage until `search_result_free`;
+    /// Go copies it first.
     pub text_ptr: *const c_char,
     pub text_len: usize,
     pub u64_value: u64,
@@ -128,7 +129,7 @@ impl SortAtom {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SortTuple {
     pub(crate) atoms: [SortAtom; MAX_SORT_FIELDS],
     pub(crate) len: usize,
@@ -583,6 +584,8 @@ impl BoundedTopK {
 enum SearchDeadline {
     Instant(Instant),
     System(SystemTime),
+    #[cfg(test)]
+    Test(std::cell::Cell<usize>),
 }
 
 impl SearchDeadline {
@@ -611,10 +614,25 @@ impl SearchDeadline {
         }
     }
 
+    #[cfg(test)]
+    fn test_after_successful_checks(checks: usize) -> Self {
+        Self::Test(std::cell::Cell::new(checks))
+    }
+
     fn is_expired(&self) -> bool {
         match self {
             Self::Instant(deadline) => Instant::now() >= *deadline,
             Self::System(deadline) => SystemTime::now().duration_since(deadline.clone()).is_ok(),
+            #[cfg(test)]
+            Self::Test(checks) => {
+                let remaining = checks.get();
+                if remaining == 0 {
+                    true
+                } else {
+                    checks.set(remaining - 1);
+                    false
+                }
+            }
         }
     }
 }
@@ -625,6 +643,15 @@ fn ensure_deadline(deadline: &SearchDeadline) -> Result<(), TantivyGoError> {
     } else {
         Ok(())
     }
+}
+
+fn check_deadline_after<T>(
+    deadline: &SearchDeadline,
+    operation: impl FnOnce() -> Result<T, TantivyGoError>,
+) -> Result<T, TantivyGoError> {
+    let result = operation();
+    ensure_deadline(deadline)?;
+    result
 }
 
 fn check_deadline_before_document(
@@ -638,7 +665,15 @@ fn check_deadline_before_document(
     Ok(())
 }
 
-pub fn search_json_sorted(
+fn parse_sorted_query_parser(index: &Index, query: &str) -> Result<Box<dyn Query>, TantivyGoError> {
+    let mut parser = QueryParser::for_index(index, vec![]);
+    parser.allow_regexes();
+    parser
+        .parse_query(query)
+        .map_err(|err| TantivyGoError::from_err("parse sorted search query", &err.to_string()))
+}
+
+pub fn search_query_sorted(
     query_ptr: *const c_char,
     fields_ptr: *const SortedSearchField,
     fields_len: usize,
@@ -649,39 +684,67 @@ pub fn search_json_sorted(
     deadline_nanos: u32,
     context: &mut TantivyContext,
 ) -> Result<*mut SearchResult, TantivyGoError> {
-    if docs_limit == 0 {
-        return Err(TantivyGoError(
-            "sorted search limit must be greater than zero".to_string(),
-        ));
-    }
-    if docs_limit > MAX_SORTED_SEARCH_LIMIT {
-        return Err(TantivyGoError(format!(
-            "sorted search limit must not exceed {MAX_SORTED_SEARCH_LIMIT}"
-        )));
-    }
-    let capacity = docs_limit
-        .checked_add(1)
-        .ok_or_else(|| TantivyGoError("sorted search limit is too large".to_string()))?;
-    let deadline = SearchDeadline::from_unix(deadline_seconds, deadline_nanos)?;
-    ensure_deadline(&deadline)?;
+    search_sorted(
+        query_ptr,
+        fields_ptr,
+        fields_len,
+        after_ptr,
+        after_len,
+        docs_limit,
+        deadline_seconds,
+        deadline_nanos,
+        context,
+    )
+}
 
+fn search_sorted(
+    query_ptr: *const c_char,
+    fields_ptr: *const SortedSearchField,
+    fields_len: usize,
+    after_ptr: *const SortedSearchValue,
+    after_len: usize,
+    docs_limit: usize,
+    deadline_seconds: i64,
+    deadline_nanos: u32,
+    context: &mut TantivyContext,
+) -> Result<*mut SearchResult, TantivyGoError> {
+    let capacity = sorted_search_capacity(docs_limit)?;
+    let deadline = SearchDeadline::from_unix(deadline_seconds, deadline_nanos)?;
+    search_sorted_with_deadline(
+        query_ptr, fields_ptr, fields_len, after_ptr, after_len, docs_limit, capacity, &deadline,
+        context,
+    )
+}
+
+fn search_sorted_with_deadline(
+    query_ptr: *const c_char,
+    fields_ptr: *const SortedSearchField,
+    fields_len: usize,
+    after_ptr: *const SortedSearchValue,
+    after_len: usize,
+    docs_limit: usize,
+    capacity: usize,
+    deadline: &SearchDeadline,
+    context: &mut TantivyContext,
+) -> Result<*mut SearchResult, TantivyGoError> {
+    let schema = context.index.schema();
+    let query = construct_sorted_query(query_ptr, &context.index, deadline)?;
+    let searcher = context.reader().searcher();
     let fields = ffi_slice(fields_ptr, fields_len, "sorted search fields")?;
     let after_values = ffi_slice(after_ptr, after_len, "sorted search after values")?;
-    let query_json = assert_string(query_ptr)?;
-    let schema = context.index.schema();
-    let query = parse_query_from_json(&context.index, &schema, &query_json)?;
-    let searcher = context.reader().searcher();
-    let descriptor = RuntimeSortDescriptor::from_ffi(&schema, &searcher, fields, &deadline)?;
+    let descriptor = RuntimeSortDescriptor::from_ffi(&schema, &searcher, fields, deadline)?;
     let after = descriptor.parse_after(after_values)?;
-    ensure_deadline(&deadline)?;
 
-    let weight = query
-        .weight(EnableScoring::disabled_from_searcher(&searcher))
-        .map_err(|err| TantivyGoError::from_err("build sorted search weight", &err.to_string()))?;
-    ensure_deadline(&deadline)?;
+    ensure_deadline(deadline)?;
+    let weight = check_deadline_after(deadline, || {
+        query
+            .weight(EnableScoring::disabled_from_searcher(&searcher))
+            .map_err(|err| TantivyGoError::from_err("build sorted search weight", &err.to_string()))
+    })?;
+
     let mut collector = BoundedTopK::new(capacity, descriptor.order);
     for (segment_ord, segment) in searcher.segment_readers().iter().enumerate() {
-        ensure_deadline(&deadline)?;
+        ensure_deadline(deadline)?;
         let columns = descriptor.open_segment(segment)?;
         let alive_bitset = segment.alive_bitset();
         let mut scorer = weight.scorer(segment, 1.0).map_err(|err| {
@@ -690,7 +753,7 @@ pub fn search_json_sorted(
         let mut doc = scorer.doc();
         let mut scorer_documents = 0usize;
         while doc != TERMINATED {
-            check_deadline_before_document(&deadline, &mut scorer_documents)?;
+            check_deadline_before_document(deadline, &mut scorer_documents)?;
             if alive_bitset
                 .map(|alive_bitset| alive_bitset.is_alive(doc))
                 .unwrap_or(true)
@@ -709,7 +772,7 @@ pub fn search_json_sorted(
             doc = scorer.advance();
         }
     }
-    ensure_deadline(&deadline)?;
+    ensure_deadline(deadline)?;
 
     let mut candidates = collector.into_sorted();
     let has_more = candidates.len() > docs_limit;
@@ -718,7 +781,7 @@ pub fn search_json_sorted(
     let mut documents = Vec::with_capacity(candidates.len());
     let mut sort_tuples = Vec::with_capacity(candidates.len());
     for candidate in candidates {
-        ensure_deadline(&deadline)?;
+        ensure_deadline(deadline)?;
         let document = searcher
             .doc::<TantivyDocument>(candidate.address)
             .map_err(|err| {
@@ -737,6 +800,34 @@ pub fn search_json_sorted(
         sort_tuples,
         has_more,
     ))))
+}
+
+fn sorted_search_capacity(docs_limit: usize) -> Result<usize, TantivyGoError> {
+    if docs_limit == 0 {
+        return Err(TantivyGoError(
+            "sorted search limit must be greater than zero".to_string(),
+        ));
+    }
+    if docs_limit > MAX_SORTED_SEARCH_LIMIT {
+        return Err(TantivyGoError(format!(
+            "sorted search limit must not exceed {MAX_SORTED_SEARCH_LIMIT}"
+        )));
+    }
+    docs_limit
+        .checked_add(1)
+        .ok_or_else(|| TantivyGoError("sorted search limit is too large".to_string()))
+}
+
+fn construct_sorted_query(
+    query_ptr: *const c_char,
+    index: &Index,
+    deadline: &SearchDeadline,
+) -> Result<Box<dyn Query>, TantivyGoError> {
+    ensure_deadline(deadline)?;
+    check_deadline_after(deadline, || {
+        let query = assert_string(query_ptr)?;
+        parse_sorted_query_parser(index, &query)
+    })
 }
 
 pub fn search_result_has_more(result: &SearchResult) -> bool {
@@ -875,6 +966,117 @@ fn sort_atom_to_ffi(atom: &SortAtom) -> SortedSearchValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tantivy_util::DOCUMENT_BUDGET_BYTES;
+
+    use std::ffi::CString;
+    use tantivy::collector::Count;
+    use tantivy::indexer::NoMergePolicy;
+    use tantivy::schema::{DateOptions, DateTimePrecision, Schema, FAST, INDEXED, STORED, STRING};
+    use tantivy::{doc, ReloadPolicy};
+
+    fn query_test_context() -> TantivyContext {
+        let mut schema_builder = Schema::builder();
+        let keyword = schema_builder.add_text_field("keyword", STRING | FAST | STORED);
+        let sort = schema_builder.add_u64_field("sort", FAST | INDEXED | STORED);
+        let u64v = schema_builder.add_u64_field("u64v", FAST | INDEXED | STORED);
+        let i64v = schema_builder.add_i64_field("i64v", FAST | INDEXED | STORED);
+        let f64v = schema_builder.add_f64_field("f64v", FAST | INDEXED | STORED);
+        let boolv = schema_builder.add_bool_field("boolv", FAST | INDEXED | STORED);
+        let datev = schema_builder.add_date_field(
+            "datev",
+            DateOptions::default()
+                .set_fast()
+                .set_indexed()
+                .set_stored()
+                .set_precision(DateTimePrecision::Milliseconds),
+        );
+        let index = tantivy::Index::create_in_ram(schema_builder.build());
+        let mut writer = index
+            .writer_with_num_threads(1, DOCUMENT_BUDGET_BYTES)
+            .expect("create test index writer");
+        writer.set_merge_policy(Box::new(NoMergePolicy));
+        writer
+            .add_document(doc!(
+                keyword => "alpha",
+                sort => 2u64,
+                u64v => 42u64,
+                i64v => -7i64,
+                f64v => 3.5f64,
+                boolv => true,
+                datev => tantivy::DateTime::from_timestamp_millis(1_704_067_200_000),
+            ))
+            .expect("add first test document");
+        writer.commit().expect("commit first test segment");
+        writer
+            .add_document(doc!(
+                keyword => "beta",
+                sort => 1u64,
+                u64v => 99u64,
+                i64v => 8i64,
+                f64v => 4.5f64,
+                boolv => false,
+                datev => tantivy::DateTime::from_timestamp_millis(1_704_153_600_000),
+            ))
+            .expect("add second test document");
+        writer.commit().expect("commit second test segment");
+
+        let reader = index
+            .reader_builder()
+            .reload_policy(ReloadPolicy::Manual)
+            .try_into()
+            .expect("create test index reader");
+        TantivyContext::new(index, writer, reader)
+    }
+
+    fn strict_query_count(context: &mut TantivyContext, source: &str) -> usize {
+        let query = parse_sorted_query_parser(&context.index, source).expect("parse strict query");
+        let searcher = context.reader().searcher();
+        searcher
+            .search(&*query, &Count)
+            .expect("execute strict query")
+    }
+
+    fn expected_error<T>(result: Result<T, TantivyGoError>) -> TantivyGoError {
+        match result {
+            Ok(_) => panic!("expected sorted search error"),
+            Err(error) => error,
+        }
+    }
+
+    fn assert_timeout<T>(result: Result<T, TantivyGoError>) {
+        assert_eq!(expected_error(result).to_string(), SEARCH_TIMEOUT_ERROR);
+    }
+
+    fn operation_error_after_deadline_check(
+        deadline: &SearchDeadline,
+    ) -> Result<(), TantivyGoError> {
+        ensure_deadline(deadline)?;
+        Err(TantivyGoError("operation error".to_string()))
+    }
+
+    fn sorted_result_with_deadline(
+        context: &mut TantivyContext,
+        deadline: &SearchDeadline,
+    ) -> Result<Box<SearchResult>, TantivyGoError> {
+        let query = CString::new("*").expect("query-parser all-query source");
+        let sort_name = CString::new("sort").expect("sort field name");
+        let fields = [SortedSearchField {
+            name_ptr: sort_name.as_ptr(),
+            direction: 1,
+        }];
+        let result = search_sorted_with_deadline(
+            query.as_ptr(),
+            fields.as_ptr(),
+            fields.len(),
+            std::ptr::null(),
+            0,
+            10,
+            sorted_search_capacity(10).expect("test sorted search capacity"),
+            deadline,
+            context,
+        )?;
+        Ok(unsafe { Box::from_raw(result) })
+    }
 
     fn tuple(atoms: Vec<SortAtom>) -> SortTuple {
         let mut tuple = SortTuple::new(atoms.len());
@@ -1014,5 +1216,132 @@ mod tests {
             .expect_err("kind resolution must check before inspecting live documents");
 
         assert_eq!(error.to_string(), SEARCH_TIMEOUT_ERROR);
+    }
+    #[test]
+    fn query_parser_requires_explicit_field() {
+        let context = query_test_context();
+        let error = expected_error(parse_sorted_query_parser(&context.index, "alpha"));
+
+        assert!(error
+            .to_string()
+            .contains("No default field declared and no field specified in query"));
+    }
+
+    #[test]
+    fn query_parser_enables_keyword_regexes() {
+        let mut context = query_test_context();
+
+        assert_eq!(strict_query_count(&mut context, "keyword:/alpha.*/"), 1);
+    }
+
+    #[test]
+    fn query_parser_reports_parser_failures() {
+        let context = query_test_context();
+        let error = expected_error(parse_sorted_query_parser(&context.index, "keyword:("));
+
+        assert!(error.to_string().contains("parse sorted search query"));
+    }
+
+    #[test]
+    fn query_parser_matches_scalar_schema_values() {
+        let mut context = query_test_context();
+        let queries = [
+            "keyword:alpha",
+            "u64v:42",
+            "i64v:-7",
+            "f64v:3.5",
+            "boolv:true",
+            r#"datev:"2024-01-01T00:00:00Z""#,
+        ];
+
+        for source in queries {
+            assert_eq!(
+                strict_query_count(&mut context, source),
+                1,
+                "query {source:?} must match the typed field"
+            );
+        }
+    }
+
+    #[test]
+    fn post_operation_deadline_check_prioritizes_timeout_over_operation_error() {
+        let expired = SearchDeadline::test_after_successful_checks(1);
+        assert_timeout(check_deadline_after(&expired, || {
+            operation_error_after_deadline_check(&expired)
+        }));
+
+        let active = SearchDeadline::test_after_successful_checks(2);
+        let error = expected_error(check_deadline_after(&active, || {
+            operation_error_after_deadline_check(&active)
+        }));
+        assert_eq!(error.to_string(), "operation error");
+    }
+
+    #[test]
+    fn query_construction_error_observes_the_post_operation_deadline() {
+        let context = query_test_context();
+        let invalid_query = CString::new("keyword:(").expect("invalid parser source");
+
+        let expired = SearchDeadline::test_after_successful_checks(1);
+        assert_timeout(construct_sorted_query(
+            invalid_query.as_ptr(),
+            &context.index,
+            &expired,
+        ));
+
+        let active = SearchDeadline::test_after_successful_checks(2);
+        let error = expected_error(construct_sorted_query(
+            invalid_query.as_ptr(),
+            &context.index,
+            &active,
+        ));
+        assert!(error.to_string().contains("parse sorted search query"));
+    }
+
+    #[test]
+    fn checks_deadline_before_and_after_query_construction() {
+        let context = query_test_context();
+        let query = CString::new("*").expect("query-parser all-query source");
+
+        let deadline = SearchDeadline::test_after_successful_checks(0);
+        assert_timeout(construct_sorted_query(
+            query.as_ptr(),
+            &context.index,
+            &deadline,
+        ));
+
+        let deadline = SearchDeadline::test_after_successful_checks(1);
+        assert_timeout(construct_sorted_query(
+            query.as_ptr(),
+            &context.index,
+            &deadline,
+        ));
+    }
+
+    #[test]
+    fn checks_deadline_during_weighting_collection_and_result_loading() {
+        let checkpoints = [
+            ("before weight creation", 2),
+            ("after weight creation", 3),
+            ("before document liveness", 5),
+            ("between segments", 6),
+            ("before result document loading", 9),
+        ];
+
+        for (boundary, successful_checks) in checkpoints {
+            let mut context = query_test_context();
+            assert_eq!(
+                context.reader().searcher().segment_readers().len(),
+                2,
+                "test fixture must retain two segments"
+            );
+            let deadline = SearchDeadline::test_after_successful_checks(successful_checks);
+            let error = expected_error(sorted_result_with_deadline(&mut context, &deadline));
+            assert_eq!(
+                error.to_string(),
+                SEARCH_TIMEOUT_ERROR,
+                "deadline must stop at {boundary}"
+            );
+        }
     }
 }

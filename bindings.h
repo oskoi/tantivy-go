@@ -14,7 +14,7 @@ typedef struct TantivyContext TantivyContext;
 
 typedef struct SortedSearchField {
   /**
-   * Input field-name bytes are borrowed only for `context_search_json_sorted`;
+   * Input field-name bytes are borrowed only for `context_search_query_sorted`;
    * they remain caller-owned and must not be retained.
    */
   const char *name_ptr;
@@ -26,8 +26,9 @@ typedef struct SortedSearchValue {
   bool missing;
   /**
    * For input cursors, text bytes are borrowed only for
-   * `context_search_json_sorted` and remain caller-owned. For output tuples,
-   * this borrows `SearchResult` storage until `search_result_free`; Go copies it first.
+   * `context_search_query_sorted`; they remain caller-owned.
+   * For output tuples, this borrows `SearchResult` storage until `search_result_free`;
+   * Go copies it first.
    */
   const char *text_ptr;
   uintptr_t text_len;
@@ -162,16 +163,16 @@ struct SearchResult *context_search_json(struct TantivyContext *context_ptr,
                                          uintptr_t docs_limit,
                                          bool with_highlights);
 
-struct SearchResult *context_search_json_sorted(struct TantivyContext *context_ptr,
-                                                const char *query_ptr,
-                                                const struct SortedSearchField *sort_fields_ptr,
-                                                uintptr_t sort_fields_len,
-                                                const struct SortedSearchValue *after_ptr,
-                                                uintptr_t after_len,
-                                                uintptr_t docs_limit,
-                                                int64_t deadline_seconds,
-                                                uint32_t deadline_nanos,
-                                                char **error_buffer);
+struct SearchResult *context_search_query_sorted(struct TantivyContext *context_ptr,
+                                                 const char *query_ptr,
+                                                 const struct SortedSearchField *sort_fields_ptr,
+                                                 uintptr_t sort_fields_len,
+                                                 const struct SortedSearchValue *after_ptr,
+                                                 uintptr_t after_len,
+                                                 uintptr_t docs_limit,
+                                                 int64_t deadline_seconds,
+                                                 uint32_t deadline_nanos,
+                                                 char **error_buffer);
 
 /**
  * Performs a search and returns only fast field values (no full document loading).
