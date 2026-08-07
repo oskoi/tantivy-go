@@ -132,7 +132,7 @@ pub fn convert_document_as_json(
         Ok(())
     })?;
 
-    let doc_json = convert_document_to_json(doc, &field_to_name)?;
+    let doc_json = convert_document_to_json(doc, &schema, &field_to_name)?;
 
     Ok(json!(doc_json).to_string())
 }

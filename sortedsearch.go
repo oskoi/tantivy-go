@@ -52,9 +52,11 @@ type SortValue struct {
 
 // SortedQueryRequest performs a filter-only Tantivy query-language search ordered by Sort.
 type SortedQueryRequest struct {
-	Query   string
-	Limit   int
-	Sort    []SortField
+	Query string
+	Limit int
+	Sort  []SortField
+	// After is the last sort tuple from a previous page. When set, the complete Sort
+	// tuple must uniquely identify every matching document; append a stable unique fast field.
 	After   []SortValue
 	Timeout time.Duration
 }

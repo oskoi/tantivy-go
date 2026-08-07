@@ -1,10 +1,11 @@
 use crate::tantivy_util::{extract_text_from_owned_value, Document, TantivyGoError};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use tantivy::schema::{Field, Value};
+use tantivy::schema::{Field, FieldType, OwnedValue, Schema, Value};
 
 pub fn convert_document_to_json<'a>(
     doc: &mut Document,
+    schema: &Schema,
     field_to_name: &'a HashMap<Field, Cow<'a, str>>,
 ) -> Result<HashMap<Cow<'a, str>, serde_json::Value>, TantivyGoError> {
     let mut result_json = HashMap::new();
@@ -24,13 +25,19 @@ pub fn convert_document_to_json<'a>(
             None => continue,
         };
 
-        let leaf = match doc.as_leaf() {
-            Some(value) => value,
-            None => continue,
-        };
-
-        let value = extract_text_from_owned_value(&leaf)?;
-        let json_value = serde_json::to_value(value).map_err(|err| {
+        let json_value = match schema.get_field_entry(field_value).field_type() {
+            FieldType::JsonObject(_) | FieldType::Bytes(_) => {
+                serde_json::to_value(OwnedValue::from(doc.as_value()))
+            }
+            _ => {
+                let leaf = match doc.as_leaf() {
+                    Some(value) => value,
+                    None => continue,
+                };
+                serde_json::to_value(extract_text_from_owned_value(&leaf)?)
+            }
+        }
+        .map_err(|err| {
             TantivyGoError::from_err("Failed to serialize field value", &err.to_string())
         })?;
         result_json.insert(Cow::Borrowed(key), json_value);

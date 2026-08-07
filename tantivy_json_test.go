@@ -83,6 +83,10 @@ func TestJSONFieldQueryParser(t *testing.T) {
 	}, "title", "payload")
 	require.NoError(t, err)
 	require.Equal(t, "alpha", docs[0]["title"])
+	require.Equal(t, map[string]any{
+		"k8s.node.id": float64(5),
+		"meta":        map[string]any{"author": "alice"},
+	}, docs[0]["payload"])
 
 	escapedResult, err := tc.SearchQueryParser(`payload.k8s\.node\.id:5`, 10, false)
 	require.NoError(t, err)

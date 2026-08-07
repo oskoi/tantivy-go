@@ -1,6 +1,6 @@
 use crate::tantivy_util::{Fragment, Highlight};
 use tantivy::query::Query;
-use tantivy::schema::Schema;
+use tantivy::schema::{FieldType, Schema};
 use tantivy::snippet::SnippetGenerator;
 use tantivy::{Searcher, TantivyDocument, TantivyError};
 
@@ -14,6 +14,12 @@ pub fn find_highlights(
     let mut highlights: Vec<Highlight> = vec![];
     if with_highlights {
         for (field_value, _) in doc.field_values() {
+            match schema.get_field_entry(field_value).field_type() {
+                FieldType::Str(options) if options.get_indexing_options().is_some() => {}
+                FieldType::JsonObject(options) if options.get_text_indexing_options().is_some() => {
+                }
+                _ => continue,
+            }
             let snippet_generator = SnippetGenerator::create(&searcher, query, field_value)?;
             let snippet = snippet_generator.snippet_from_doc(doc);
             let highlighted: Vec<(usize, usize)> = snippet

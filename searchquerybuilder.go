@@ -158,34 +158,3 @@ type AllQueryStruct struct {
 }
 
 func (aq *AllQueryStruct) IsQuery() {}
-
-// Note: RangeQuery and FuzzyQuery are not yet implemented
-// They require tantivy API changes
-//
-// type RangeQueryStruct struct {
-// 	FieldIndex   int       `json:"field_index"`
-// 	LowerBound   string    `json:"lower_bound"`
-// 	UpperBound   string    `json:"upper_bound"`
-// 	IncludeLower bool      `json:"include_lower"`
-// 	IncludeUpper bool      `json:"include_upper"`
-// 	RangeType    int       `json:"range_type"`
-// 	Boost        float64   `json:"boost"`
-// }
-//
-// func (qb *QueryBuilder) RangeQuery(modifier QueryModifier, field string, lowerBound, upperBound string, includeLower, includeUpper bool, rangeType int, boost float64) *QueryBuilder {
-// 	// Not yet implemented
-// 	return qb
-// }
-//
-// type FuzzyQueryStruct struct {
-// 	FieldIndex   int     `json:"field_index"`
-// 	TextIndex    int     `json:"text_index"`
-// 	Distance     uint8   `json:"distance"`
-// 	PrefixLength uint    `json:"prefix_length"`
-// 	Boost        float64 `json:"boost"`
-// }
-//
-// func (qb *QueryBuilder) FuzzyQuery(modifier QueryModifier, field string, text string, distance uint8, prefixLength uint, boost float64) *QueryBuilder {
-// 	// Not yet implemented
-// 	return qb
-// }

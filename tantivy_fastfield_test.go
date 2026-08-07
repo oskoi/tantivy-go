@@ -1,6 +1,7 @@
 package tantivy_go_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,7 @@ func TestSearchFastFieldBytes(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	err = builder.AddBytesField("blob", false, true, false)
+	err = builder.AddBytesField("blob", true, true, false)
 	require.NoError(t, err)
 
 	schema, err := builder.BuildSchema()
@@ -78,6 +79,22 @@ func TestSearchFastFieldBytes(t *testing.T) {
 
 	require.True(t, values["AAEC"])
 	require.True(t, values["//4="])
+
+	searchResult, err := tc.SearchQueryParser("title:alpha", 10, false)
+	require.NoError(t, err)
+	docs, err := tantivy_go.GetSearchResults(searchResult, tc, func(jsonStr string) (map[string]any, error) {
+		out := map[string]any{}
+		return out, json.Unmarshal([]byte(jsonStr), &out)
+	}, "blob")
+	require.NoError(t, err)
+
+	storedValues := map[string]bool{}
+	for _, doc := range docs {
+		value, ok := doc["blob"].(string)
+		require.True(t, ok)
+		storedValues[value] = true
+	}
+	require.Equal(t, values, storedValues)
 }
 
 func TestSearchFastFieldTypedValues(t *testing.T) {

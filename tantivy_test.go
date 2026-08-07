@@ -1144,6 +1144,18 @@ func Test(t *testing.T) {
 	})
 }
 
+func TestHighlightsSkipStoredNonTextFields(t *testing.T) {
+	tc, _ := newTypedFastFieldContext(t)
+
+	result, err := tc.SearchQueryParser("title:alpha", 10, true)
+	require.NoError(t, err)
+	defer result.Free()
+
+	size, err := result.GetSize()
+	require.NoError(t, err)
+	require.Equal(t, 2, int(size))
+}
+
 func addDoc(
 	t *testing.T,
 	title string,

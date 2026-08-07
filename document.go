@@ -148,8 +148,10 @@ func (d *Document) AddF64Field(value float64, tc *TantivyContext, fieldName stri
 	return tryExtractError(errBuffer)
 }
 
-// AddDateField adds a date field to the document.
-// The value should be a Unix timestamp in milliseconds.
+// AddDateField adds a date field using a Unix timestamp in milliseconds.
+// Tantivy represents dates as signed 64-bit nanoseconds, so timestampMillis must be
+// between -9_223_372_036_854 and 9_223_372_036_854 inclusive. Values outside this
+// range overflow and may abort the process in checked builds.
 func (d *Document) AddDateField(timestampMillis int64, tc *TantivyContext, fieldName string) error {
 	if err := d.ensureOpen(); err != nil {
 		return err
