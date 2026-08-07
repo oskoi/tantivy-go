@@ -24,6 +24,7 @@ func TestNumericFields(t *testing.T) {
 		true,
 		false,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionBasic,
 		tantivy_go.TokenizerRaw,
 	)

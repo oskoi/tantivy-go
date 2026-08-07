@@ -22,6 +22,7 @@ func newJSONContext(t *testing.T, indexDir string, expandDots bool) *tantivy_go.
 		true,
 		true,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.DefaultTokenizer,
 	)

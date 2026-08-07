@@ -25,6 +25,7 @@ func TestSearchFastFieldBytes(t *testing.T) {
 		true,
 		true,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.DefaultTokenizer,
 	)
@@ -158,7 +159,7 @@ func newTypedFastFieldContext(t *testing.T) (*tantivy_go.TantivyContext, time.Ti
 
 	builder, err := tantivy_go.NewSchemaBuilder()
 	require.NoError(t, err)
-	require.NoError(t, builder.AddTextField("title", true, true, false, tantivy_go.IndexRecordOptionWithFreqsAndPositions, tantivy_go.TokenizerSimple))
+	require.NoError(t, builder.AddTextField("title", true, true, false, true, tantivy_go.IndexRecordOptionWithFreqsAndPositions, tantivy_go.TokenizerSimple))
 	require.NoError(t, builder.AddU64Field("u64v", true, true, true))
 	require.NoError(t, builder.AddI64Field("i64v", true, true, true))
 	require.NoError(t, builder.AddF64Field("f64v", true, true, true))

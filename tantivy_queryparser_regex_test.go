@@ -2,9 +2,11 @@ package tantivy_go_test
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	tantivy_go "github.com/oskoi/tantivy-go"
+	"github.com/oskoi/tantivy-go/internal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,4 +71,58 @@ func TestSearchQueryParserRegexOption(t *testing.T) {
 		require.True(t, titles["three foxes"])
 		require.True(t, titles["throne room"])
 	})
+}
+
+func TestSearchQueryParserStoredOnlyTextFieldIsStoredButNotIndexed(t *testing.T) {
+	const storedOnlyField = "stored_only"
+
+	require.NoError(t, internal.LibInit(true, false, "debug"))
+
+	builder, err := tantivy_go.NewSchemaBuilder()
+	require.NoError(t, err)
+	require.NoError(t, builder.AddTextField(
+		storedOnlyField,
+		true,
+		false,
+		false,
+		false,
+		tantivy_go.IndexRecordOptionBasic,
+		tantivy_go.TokenizerRaw,
+	))
+	schema, err := builder.BuildSchema()
+	require.NoError(t, err)
+	t.Cleanup(schema.Free)
+
+	tc, err := tantivy_go.NewTantivyContextWithSchema(filepath.Join(t.TempDir(), "idx"), schema)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, tc.Close()) })
+	require.NoError(t, tc.RegisterTextAnalyzerRaw(tantivy_go.TokenizerRaw))
+
+	document := tantivy_go.NewDocument()
+	require.NoError(t, document.AddField("storedvalue", tc, storedOnlyField))
+	require.NoError(t, tc.AddAndConsumeDocuments(document))
+
+	all, err := tc.SearchQueryParser("*", 1, false)
+	require.NoError(t, err)
+	defer all.Free()
+	size, err := all.GetSize()
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), size)
+	stored, err := all.Get(0)
+	require.NoError(t, err)
+	defer stored.Free()
+	payload, err := stored.ToJSON(tc, storedOnlyField)
+	require.NoError(t, err)
+	var value struct {
+		Stored string `json:"stored_only"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(payload), &value))
+	require.Equal(t, "storedvalue", value.Stored)
+
+	queried, err := tc.SearchQueryParser(storedOnlyField+":storedvalue", 1, false)
+	if queried != nil {
+		queried.Free()
+	}
+	require.Nil(t, queried)
+	require.ErrorContains(t, err, "not declared as indexed")
 }

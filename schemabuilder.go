@@ -113,9 +113,10 @@ func (b *SchemaBuilder) ensureNewField(name string) error {
 // - name: The name of the field.
 // - stored: Whether the field should be stored in the index.
 // - isText: Whether the field should be treated as tantivy text or string for full-text search.
-// - isFast: Whether the field should be isText as tantivy quick field.
-// - indexRecordOption: The indexing option to be used (e.g., basic, with frequencies, with frequencies and positions).
-// - tokenizer: The name of the tokenizer to be used for the field.
+// - isFast: Whether the field should be a Tantivy fast field.
+// - isIndexed: Whether the field should have an inverted index and be queryable.
+// - indexRecordOption: The indexing option for an indexed field (e.g., basic, with frequencies, with frequencies and positions).
+// - tokenizer: The tokenizer for an indexed field.
 //
 // Returns an error if the field could not be added.
 func (b *SchemaBuilder) AddTextField(
@@ -123,6 +124,7 @@ func (b *SchemaBuilder) AddTextField(
 	stored bool,
 	isText bool,
 	isFast bool,
+	isIndexed bool,
 	indexRecordOption int,
 	tokenizer string,
 ) error {
@@ -142,6 +144,7 @@ func (b *SchemaBuilder) AddTextField(
 		C._Bool(stored),
 		C._Bool(isText),
 		C._Bool(isFast),
+		C._Bool(isIndexed),
 		pointerCType(indexRecordOption),
 		cTokenizer,
 		&errBuffer,

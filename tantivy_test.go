@@ -461,6 +461,7 @@ func Test(t *testing.T) {
 			true,
 			true,
 			false,
+			true,
 			tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 			tantivy_go.TokenizerEdgeNgram,
 		)
@@ -471,6 +472,7 @@ func Test(t *testing.T) {
 			true,
 			true,
 			false,
+			true,
 			tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 			tantivy_go.TokenizerEdgeNgram,
 		)
@@ -1195,6 +1197,7 @@ func fx(
 		true,
 		true,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.TokenizerNgram,
 	)
@@ -1205,6 +1208,7 @@ func fx(
 		true,
 		false,
 		isFastId,
+		true,
 		tantivy_go.IndexRecordOptionBasic,
 		tantivy_go.TokenizerRaw,
 	)
@@ -1215,6 +1219,7 @@ func fx(
 		true,
 		true,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.TokenizerSimple,
 	)
@@ -1328,6 +1333,7 @@ func fxWithConfig(t *testing.T, config *tantivyConfig) (*tantivy_go.Schema, *tan
 			field.stored,
 			field.isText,
 			field.isFast,
+			true,
 			field.recordOption,
 			field.tokenizer,
 		)

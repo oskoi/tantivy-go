@@ -24,11 +24,11 @@ func TestOpstampPersistence(t *testing.T) {
 		builder, err := NewSchemaBuilder()
 		require.NoError(t, err)
 
-		err = builder.AddTextField("id", true, false, false, IndexRecordOptionBasic, DefaultTokenizer)
+		err = builder.AddTextField("id", true, false, false, true, IndexRecordOptionBasic, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("title", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("title", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
 
 		schema, err := builder.BuildSchema()
@@ -83,11 +83,11 @@ func TestOpstampPersistence(t *testing.T) {
 		builder, err := NewSchemaBuilder()
 		require.NoError(t, err)
 
-		err = builder.AddTextField("id", true, false, false, IndexRecordOptionBasic, DefaultTokenizer)
+		err = builder.AddTextField("id", true, false, false, true, IndexRecordOptionBasic, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("title", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("title", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
 
 		schema, err := builder.BuildSchema()
@@ -136,11 +136,11 @@ func TestOpstampPersistence(t *testing.T) {
 		builder, err := NewSchemaBuilder()
 		require.NoError(t, err)
 
-		err = builder.AddTextField("id", true, false, false, IndexRecordOptionBasic, DefaultTokenizer)
+		err = builder.AddTextField("id", true, false, false, true, IndexRecordOptionBasic, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("title", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("title", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
 
 		schema, err := builder.BuildSchema()
@@ -186,11 +186,11 @@ func TestOpstampPersistence(t *testing.T) {
 		builder, err := NewSchemaBuilder()
 		require.NoError(t, err)
 
-		err = builder.AddTextField("id", true, false, false, IndexRecordOptionBasic, DefaultTokenizer)
+		err = builder.AddTextField("id", true, false, false, true, IndexRecordOptionBasic, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("title", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("title", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
 
 		schema, err := builder.BuildSchema()
@@ -229,11 +229,11 @@ func TestOpstampPersistence(t *testing.T) {
 		builder, err := NewSchemaBuilder()
 		require.NoError(t, err)
 
-		err = builder.AddTextField("id", true, false, false, IndexRecordOptionBasic, DefaultTokenizer)
+		err = builder.AddTextField("id", true, false, false, true, IndexRecordOptionBasic, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("title", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("title", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
-		err = builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
+		err = builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, DefaultTokenizer)
 		require.NoError(t, err)
 
 		schema, err := builder.BuildSchema()

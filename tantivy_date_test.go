@@ -25,6 +25,7 @@ func TestDateFields(t *testing.T) {
 		true,
 		true,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.TokenizerSimple,
 	)

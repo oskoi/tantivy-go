@@ -19,8 +19,8 @@ func newLifecycleContext(t *testing.T) *TantivyContext {
 
 	builder, err := NewSchemaBuilder()
 	require.NoError(t, err)
-	require.NoError(t, builder.AddTextField("id", true, false, false, IndexRecordOptionBasic, TokenizerSimple))
-	require.NoError(t, builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, TokenizerSimple))
+	require.NoError(t, builder.AddTextField("id", true, false, false, true, IndexRecordOptionBasic, TokenizerSimple))
+	require.NoError(t, builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, TokenizerSimple))
 
 	schema, err := builder.BuildSchema()
 	require.NoError(t, err)
@@ -211,10 +211,10 @@ func TestSchemaBuilderDoesNotRecordFailedField(t *testing.T) {
 	builder, err := NewSchemaBuilder()
 	require.NoError(t, err)
 
-	err = builder.AddTextField("body", true, true, false, 999, TokenizerSimple)
+	err = builder.AddTextField("body", true, true, false, true, 999, TokenizerSimple)
 	require.Error(t, err)
 
-	err = builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, TokenizerSimple)
+	err = builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, TokenizerSimple)
 	require.NoError(t, err)
 }
 
@@ -222,7 +222,7 @@ func TestSchemaAndBuilderFreeAreIdempotent(t *testing.T) {
 	require.NoError(t, internal.LibInit(true, false, "debug"))
 	builder, err := NewSchemaBuilder()
 	require.NoError(t, err)
-	require.NoError(t, builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, TokenizerSimple))
+	require.NoError(t, builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, TokenizerSimple))
 
 	schema, err := builder.BuildSchema()
 	require.NoError(t, err)

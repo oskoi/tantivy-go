@@ -31,6 +31,7 @@ func main() {
 		true,
 		true,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.TokenizerEdgeNgram,
 	)
@@ -45,6 +46,7 @@ func main() {
 		true,
 		false,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionBasic,
 		tantivy_go.TokenizerRaw,
 	)
@@ -59,6 +61,7 @@ func main() {
 		true,
 		true,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.TokenizerSimple,
 	)

@@ -55,6 +55,7 @@ func execute(
 		true,
 		true,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.TokenizerSimple,
 	)
@@ -67,6 +68,7 @@ func execute(
 		true,
 		true,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.TokenizerSimple,
 	)
@@ -79,6 +81,7 @@ func execute(
 		true,
 		false,
 		false,
+		true,
 		tantivy_go.IndexRecordOptionWithFreqsAndPositions,
 		tantivy_go.TokenizerSimple,
 	)

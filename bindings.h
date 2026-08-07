@@ -45,6 +45,7 @@ uint32_t schema_builder_add_text_field(SchemaBuilder *builder_ptr,
                                        bool stored,
                                        bool is_text,
                                        bool is_fast,
+                                       bool is_indexed,
                                        uintptr_t index_record_option_const,
                                        const char *tokenizer_name_ptr,
                                        char **error_buffer);

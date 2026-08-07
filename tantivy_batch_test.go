@@ -18,9 +18,9 @@ func TestBatchAddAndDeleteDocuments(t *testing.T) {
 	builder, err := NewSchemaBuilder()
 	require.NoError(t, err)
 
-	err = builder.AddTextField("id", true, false, false, IndexRecordOptionBasic, "simple")
+	err = builder.AddTextField("id", true, false, false, true, IndexRecordOptionBasic, "simple")
 	require.NoError(t, err)
-	err = builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, "simple")
+	err = builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, "simple")
 	require.NoError(t, err)
 
 	schema, err := builder.BuildSchema()
@@ -141,9 +141,9 @@ func TestBatchOperationPerformance(t *testing.T) {
 	builder, err := NewSchemaBuilder()
 	require.NoError(t, err)
 
-	err = builder.AddTextField("id", true, false, false, IndexRecordOptionBasic, "simple")
+	err = builder.AddTextField("id", true, false, false, true, IndexRecordOptionBasic, "simple")
 	require.NoError(t, err)
-	err = builder.AddTextField("body", true, true, false, IndexRecordOptionWithFreqsAndPositions, "simple")
+	err = builder.AddTextField("body", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, "simple")
 	require.NoError(t, err)
 
 	schema, err := builder.BuildSchema()
@@ -202,9 +202,9 @@ func TestBatchDeleteAndAddSameID(t *testing.T) {
 	builder, err := NewSchemaBuilder()
 	require.NoError(t, err)
 
-	err = builder.AddTextField("id", true, false, false, IndexRecordOptionBasic, "raw")
+	err = builder.AddTextField("id", true, false, false, true, IndexRecordOptionBasic, "raw")
 	require.NoError(t, err)
-	err = builder.AddTextField("content", true, true, false, IndexRecordOptionWithFreqsAndPositions, "simple")
+	err = builder.AddTextField("content", true, true, false, true, IndexRecordOptionWithFreqsAndPositions, "simple")
 	require.NoError(t, err)
 
 	schema, err := builder.BuildSchema()

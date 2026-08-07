@@ -340,8 +340,8 @@ func newSortedSearchContext(t *testing.T, records ...sortedSearchFixtureDoc) *ta
 
 	builder, err := tantivy_go.NewSchemaBuilder()
 	require.NoError(t, err)
-	require.NoError(t, builder.AddTextField(sortedSearchDocIDField, true, false, true, tantivy_go.IndexRecordOptionBasic, tantivy_go.TokenizerRaw))
-	require.NoError(t, builder.AddTextField(sortedSearchTextField, true, false, true, tantivy_go.IndexRecordOptionBasic, tantivy_go.TokenizerRaw))
+	require.NoError(t, builder.AddTextField(sortedSearchDocIDField, true, false, true, true, tantivy_go.IndexRecordOptionBasic, tantivy_go.TokenizerRaw))
+	require.NoError(t, builder.AddTextField(sortedSearchTextField, true, false, true, true, tantivy_go.IndexRecordOptionBasic, tantivy_go.TokenizerRaw))
 	require.NoError(t, builder.AddU64Field(sortedSearchU64Field, true, true, true))
 	require.NoError(t, builder.AddI64Field(sortedSearchI64Field, true, true, true))
 	require.NoError(t, builder.AddF64Field(sortedSearchF64Field, true, true, true))
