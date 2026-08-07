@@ -1,3 +1,4 @@
+use super::util::TantivyGoError;
 use crate::c_util::sorted_search::SortTuple;
 use serde::Serialize;
 use tantivy::{Index, IndexReader, IndexWriter, TantivyDocument};
@@ -17,9 +18,11 @@ impl TantivyContext {
         }
     }
 
-    pub fn reader(&mut self) -> &IndexReader {
-        let _ = self.reader.reload();
-        return &self.reader;
+    pub fn reader(&mut self) -> Result<&IndexReader, TantivyGoError> {
+        self.reader
+            .reload()
+            .map_err(|err| TantivyGoError::from_err("Reload index reader", &err.to_string()))?;
+        Ok(&self.reader)
     }
 }
 

@@ -2,6 +2,7 @@ package tantivy_go
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,11 @@ import (
 )
 
 func newLifecycleContext(t *testing.T) *TantivyContext {
+	t.Helper()
+	return newLifecycleContextAt(t, filepath.Join(t.TempDir(), "idx"))
+}
+
+func newLifecycleContextAt(t *testing.T, indexPath string) *TantivyContext {
 	t.Helper()
 
 	require.NoError(t, internal.LibInit(true, false, "debug"))
@@ -26,7 +32,7 @@ func newLifecycleContext(t *testing.T) *TantivyContext {
 	require.NoError(t, err)
 	t.Cleanup(schema.Free)
 
-	tc, err := NewTantivyContextWithSchema(filepath.Join(t.TempDir(), "idx"), schema)
+	tc, err := NewTantivyContextWithSchema(indexPath, schema)
 	require.NoError(t, err)
 	require.NoError(t, tc.RegisterTextAnalyzerSimple(TokenizerSimple, 100, English))
 	return tc
@@ -87,6 +93,20 @@ func TestCStringInputsRemainUsableThroughFFI(t *testing.T) {
 
 func TestClosedContextSentinelErrors(t *testing.T) {
 	require.True(t, errors.Is(ErrClosedContext, ErrClosedContext))
+}
+
+func TestReloadReaderReturnsErrorWhenCommittedMetaIsMissing(t *testing.T) {
+	indexPath := filepath.Join(t.TempDir(), "idx")
+	tc := newLifecycleContextAt(t, indexPath)
+	t.Cleanup(func() { require.NoError(t, tc.Close()) })
+
+	doc := NewDocument()
+	require.NoError(t, doc.AddField("1", tc, "id"))
+	require.NoError(t, doc.AddField("reload fault", tc, "body"))
+	require.NoError(t, tc.AddAndConsumeDocuments(doc))
+	require.NoError(t, os.Remove(filepath.Join(indexPath, "meta.json")))
+
+	require.Error(t, tc.ReloadReader())
 }
 
 func TestCloseIsIdempotent(t *testing.T) {

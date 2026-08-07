@@ -553,7 +553,7 @@ pub extern "C" fn context_num_docs(
 ) -> u64 {
     let result = || -> Result<u64, TantivyGoError> {
         let context = assert_pointer(context_ptr)?;
-        let reader = context.reader();
+        let reader = context.reader()?;
         Ok(reader.searcher().num_docs())
     };
 
@@ -1618,8 +1618,7 @@ pub extern "C" fn context_reload_reader(
 ) {
     let result = || -> Result<(), TantivyGoError> {
         let context = assert_pointer(context_ptr)?;
-        // Force a reload by actually calling the reader method
-        let _reader = context.reader();
+        context.reader()?;
         Ok(())
     };
 

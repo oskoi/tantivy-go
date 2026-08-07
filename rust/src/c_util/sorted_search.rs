@@ -729,7 +729,7 @@ fn search_sorted_with_deadline(
 ) -> Result<*mut SearchResult, TantivyGoError> {
     let schema = context.index.schema();
     let query = construct_sorted_query(query_ptr, &context.index, deadline)?;
-    let searcher = context.reader().searcher();
+    let searcher = context.reader()?.searcher();
     let fields = ffi_slice(fields_ptr, fields_len, "sorted search fields")?;
     let after_values = ffi_slice(after_ptr, after_len, "sorted search after values")?;
     let descriptor = RuntimeSortDescriptor::from_ffi(&schema, &searcher, fields, deadline)?;
@@ -1030,7 +1030,7 @@ mod tests {
 
     fn strict_query_count(context: &mut TantivyContext, source: &str) -> usize {
         let query = parse_sorted_query_parser(&context.index, source).expect("parse strict query");
-        let searcher = context.reader().searcher();
+        let searcher = context.reader().expect("reload test reader").searcher();
         searcher
             .search(&*query, &Count)
             .expect("execute strict query")
@@ -1331,7 +1331,12 @@ mod tests {
         for (boundary, successful_checks) in checkpoints {
             let mut context = query_test_context();
             assert_eq!(
-                context.reader().searcher().segment_readers().len(),
+                context
+                    .reader()
+                    .expect("reload test reader")
+                    .searcher()
+                    .segment_readers()
+                    .len(),
                 2,
                 "test fixture must retain two segments"
             );

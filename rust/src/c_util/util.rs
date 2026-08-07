@@ -394,7 +394,7 @@ fn perform_search<F>(
 where
     F: FnOnce(&Index) -> Result<Box<dyn Query>, String>,
 {
-    let searcher = &context.reader().searcher();
+    let searcher = context.reader()?.searcher();
     let schema = context.index.schema();
 
     let query = query_parser_fn(&context.index).map_err(|err| TantivyGoError(err))?;
@@ -584,7 +584,7 @@ fn search_fast_field_with_query_parser<T>(
         query_ptr,
         &context.index,
     )?;
-    let searcher = context.reader().searcher();
+    let searcher = context.reader()?.searcher();
     let schema = context.index.schema();
     let fast_field = Field::from_field_id(fast_field_id);
 
@@ -614,7 +614,7 @@ fn search_fast_field_with_json<T>(
     let schema = context.index.schema();
     let query = parse_query_from_json(&context.index, &schema, &query_str)
         .map_err(|e| TantivyGoError(e.to_string()))?;
-    let searcher = context.reader().searcher();
+    let searcher = context.reader()?.searcher();
     let fast_field = Field::from_field_id(fast_field_id);
 
     let (scores, doc_addresses) =
