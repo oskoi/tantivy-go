@@ -357,3 +357,18 @@ func (mismatchedSearchContext) WithHighlights() bool { return false }
 func (mismatchedSearchContext) GetFieldAndWeights() ([]string, []float32) {
 	return []string{"body"}, nil
 }
+
+func TestTantivyContextReadLockAllowsConcurrentSnapshotSearches(t *testing.T) {
+	tc := newLifecycleContext(t)
+
+	_, unlockFirst, err := tc.readLockNative()
+	require.NoError(t, err)
+	_, unlockSecond, err := tc.readLockNative()
+	require.NoError(t, err)
+	require.False(t, tc.mu.TryLock(), "writer lock must wait for active snapshot searches")
+
+	unlockSecond()
+	unlockFirst()
+	require.True(t, tc.mu.TryLock())
+	tc.mu.Unlock()
+}

@@ -15,6 +15,7 @@ pub use self::util::add_fields;
 pub use self::util::add_i64_field;
 pub use self::util::add_json_field;
 pub use self::util::add_u64_field;
+pub use self::util::assert_const_pointer;
 pub use self::util::assert_pointer;
 pub use self::util::assert_str;
 pub use self::util::assert_string;

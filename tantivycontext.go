@@ -12,7 +12,7 @@ import (
 type TantivyContext struct {
 	ptr    *C.TantivyContext
 	schema *Schema
-	mu     sync.Mutex
+	mu     sync.RWMutex
 }
 
 type queryParserConfig struct {
@@ -39,6 +39,18 @@ func (tc *TantivyContext) lockNative() (*C.TantivyContext, func(), error) {
 		return nil, nil, ErrClosedContext
 	}
 	return tc.ptr, tc.mu.Unlock, nil
+}
+
+func (tc *TantivyContext) readLockNative() (*C.TantivyContext, func(), error) {
+	if tc == nil {
+		return nil, nil, ErrClosedContext
+	}
+	tc.mu.RLock()
+	if tc.ptr == nil {
+		tc.mu.RUnlock()
+		return nil, nil, ErrClosedContext
+	}
+	return tc.ptr, tc.mu.RUnlock, nil
 }
 
 // NewTantivyContextWithSchema creates a new instance of TantivyContext with the provided schema.

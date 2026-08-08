@@ -19,10 +19,18 @@ impl TantivyContext {
     }
 
     pub fn reader(&mut self) -> Result<&IndexReader, TantivyGoError> {
+        self.reload_reader()?;
+        Ok(&self.reader)
+    }
+
+    pub fn reload_reader(&mut self) -> Result<(), TantivyGoError> {
         self.reader
             .reload()
-            .map_err(|err| TantivyGoError::from_err("Reload index reader", &err.to_string()))?;
-        Ok(&self.reader)
+            .map_err(|err| TantivyGoError::from_err("Reload index reader", &err.to_string()))
+    }
+
+    pub fn current_reader(&self) -> &IndexReader {
+        &self.reader
     }
 }
 
@@ -84,5 +92,17 @@ impl SearchResult {
 
     pub(crate) fn sort_tuples(&self) -> Option<&[SortTuple]> {
         self.sort_tuples.as_deref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TantivyContext;
+
+    #[test]
+    fn tantivy_context_supports_shared_reader_access() {
+        fn assert_sync<T: Sync>() {}
+
+        assert_sync::<TantivyContext>();
     }
 }

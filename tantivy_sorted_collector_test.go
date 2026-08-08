@@ -32,7 +32,7 @@ type sortedSearchFixtureDoc struct {
 	Date *int64
 }
 
-func TestSearchQuerySortedMultipleFields(t *testing.T) {
+func TestSearchSortedMultipleFields(t *testing.T) {
 	tc := newSortedSearchContext(t,
 		sortedSearchFixtureDoc{
 			ID:   "first",
@@ -64,7 +64,7 @@ func TestSearchQuerySortedMultipleFields(t *testing.T) {
 		},
 	)
 
-	result, err := tc.SearchQuerySorted(tantivy_go.SortedQueryRequest{
+	result, err := tc.SearchSorted(tantivy_go.SortedQueryRequest{
 		Query: "*",
 		Limit: 4,
 		Sort: []tantivy_go.SortField{
@@ -109,7 +109,7 @@ func TestSearchQuerySortedMultipleFields(t *testing.T) {
 	})
 }
 
-func TestSearchQuerySortedMissingLastBothDirections(t *testing.T) {
+func TestSearchSortedMissingLastBothDirections(t *testing.T) {
 	const earlyDateMillis = int64(1_700_000_000_123)
 	const lateDateMillis = int64(1_700_000_001_456)
 
@@ -253,7 +253,7 @@ func TestSearchQuerySortedMissingLastBothDirections(t *testing.T) {
 			for _, directionCase := range directions {
 				directionCase := directionCase
 				t.Run(directionCase.name, func(t *testing.T) {
-					result, err := tc.SearchQuerySorted(tantivy_go.SortedQueryRequest{
+					result, err := tc.SearchSorted(tantivy_go.SortedQueryRequest{
 						Query: "*",
 						Limit: 3,
 						Sort: []tantivy_go.SortField{{
@@ -278,7 +278,7 @@ func TestSearchQuerySortedMissingLastBothDirections(t *testing.T) {
 	}
 }
 
-func TestSearchQuerySortedRejectsNativeDescriptorErrors(t *testing.T) {
+func TestSearchSortedRejectsNativeDescriptorErrors(t *testing.T) {
 	tc := newSortedSearchContext(t)
 	validSort := []tantivy_go.SortField{{
 		Name:      sortedSearchU64Field,
@@ -322,7 +322,7 @@ func TestSearchQuerySortedRejectsNativeDescriptorErrors(t *testing.T) {
 	for _, testCase := range testCases {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			result, err := tc.SearchQuerySorted(testCase.request)
+			result, err := tc.SearchSorted(testCase.request)
 			if result != nil {
 				result.Free()
 			}

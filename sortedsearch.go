@@ -61,10 +61,22 @@ type SortedQueryRequest struct {
 	Timeout time.Duration
 }
 
-// SearchQuerySorted runs a Tantivy query-language search without relevance scoring and returns at
+// SearchSorted runs a Tantivy query-language search without relevance scoring and returns at
 // most Limit documents ordered by the requested fast-field tuple.
-func (tc *TantivyContext) SearchQuerySorted(request SortedQueryRequest) (*SearchResult, error) {
+func (tc *TantivyContext) SearchSorted(request SortedQueryRequest) (*SearchResult, error) {
 	return tc.searchSorted(sortedQueryRequest{
+		query:   request.Query,
+		limit:   request.Limit,
+		sort:    request.Sort,
+		after:   request.After,
+		timeout: request.Timeout,
+	})
+}
+
+// SearchSortedSnapshot searches the currently loaded reader snapshot without reloading it. Calls
+// execute concurrently; writers and ReloadReader remain exclusive.
+func (tc *TantivyContext) SearchSortedSnapshot(request SortedQueryRequest) (*SearchResult, error) {
+	return tc.searchSortedSnapshot(sortedQueryRequest{
 		query:   request.Query,
 		limit:   request.Limit,
 		sort:    request.Sort,
@@ -247,7 +259,48 @@ func (tc *TantivyContext) searchSorted(request sortedQueryRequest) (*SearchResul
 	defer unlock()
 
 	var errBuffer *C.char
-	result := C.context_search_query_sorted(
+	result := C.context_search_sorted(
+		ptr,
+		query,
+		&descriptors.fields[0],
+		C.uintptr_t(len(descriptors.fields)),
+		cSortedSearchAfterPointer(descriptors.after),
+		C.uintptr_t(len(descriptors.after)),
+		C.uintptr_t(request.limit),
+		C.int64_t(deadline.Unix()),
+		C.uint32_t(deadline.Nanosecond()),
+		&errBuffer,
+	)
+	if result == nil {
+		return nil, sortedSearchError(errBuffer)
+	}
+	return &SearchResult{ptr: result}, nil
+}
+
+func (tc *TantivyContext) searchSortedSnapshot(request sortedQueryRequest) (*SearchResult, error) {
+	if err := validateSortedQueryRequest(request); err != nil {
+		return nil, err
+	}
+
+	deadline := time.Now().Add(request.timeout)
+
+	descriptors, err := newSortedSearchDescriptors(request)
+	if err != nil {
+		return nil, err
+	}
+	defer descriptors.free()
+
+	query, freeQuery := newCString(request.query)
+	defer freeQuery()
+
+	ptr, unlock, err := tc.readLockNative()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+
+	var errBuffer *C.char
+	result := C.context_search_sorted_snapshot(
 		ptr,
 		query,
 		&descriptors.fields[0],

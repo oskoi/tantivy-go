@@ -77,6 +77,13 @@ pub fn assert_pointer<'a, T>(ptr: *mut T) -> Result<&'a mut T, TantivyGoError> {
     unsafe { Ok(&mut *ptr) }
 }
 
+pub fn assert_const_pointer<'a, T>(ptr: *const T) -> Result<&'a T, TantivyGoError> {
+    if ptr.is_null() {
+        return Err(TantivyGoError(POINTER_IS_NULL.to_owned()));
+    }
+    unsafe { Ok(&*ptr) }
+}
+
 pub fn process_type_slice<'a, T, F>(
     ptr: *mut *mut T,
     len: usize,

@@ -22,7 +22,7 @@ const DEADLINE_CHECK_INTERVAL: usize = 1_024;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct SortedSearchField {
-    /// Input field-name bytes are borrowed only for `context_search_query_sorted`;
+    /// Input field-name bytes are borrowed only for the duration of a sorted search;
     /// they remain caller-owned and must not be retained.
     pub name_ptr: *const c_char,
     pub direction: u8,
@@ -34,7 +34,7 @@ pub struct SortedSearchValue {
     pub kind: u8,
     pub missing: bool,
     /// For input cursors, text bytes are borrowed only for
-    /// `context_search_query_sorted`; they remain caller-owned.
+    /// the duration of a sorted search; they remain caller-owned.
     /// For output tuples, this borrows `SearchResult` storage until `search_result_free`;
     /// Go copies it first.
     pub text_ptr: *const c_char,
@@ -673,7 +673,7 @@ fn parse_sorted_query_parser(index: &Index, query: &str) -> Result<Box<dyn Query
         .map_err(|err| TantivyGoError::from_err("parse sorted search query", &err.to_string()))
 }
 
-pub fn search_query_sorted(
+pub fn search_sorted_reloading(
     query_ptr: *const c_char,
     fields_ptr: *const SortedSearchField,
     fields_len: usize,
@@ -683,6 +683,31 @@ pub fn search_query_sorted(
     deadline_seconds: i64,
     deadline_nanos: u32,
     context: &mut TantivyContext,
+) -> Result<*mut SearchResult, TantivyGoError> {
+    context.reload_reader()?;
+    search_sorted(
+        query_ptr,
+        fields_ptr,
+        fields_len,
+        after_ptr,
+        after_len,
+        docs_limit,
+        deadline_seconds,
+        deadline_nanos,
+        context,
+    )
+}
+
+pub fn search_sorted_snapshot(
+    query_ptr: *const c_char,
+    fields_ptr: *const SortedSearchField,
+    fields_len: usize,
+    after_ptr: *const SortedSearchValue,
+    after_len: usize,
+    docs_limit: usize,
+    deadline_seconds: i64,
+    deadline_nanos: u32,
+    context: &TantivyContext,
 ) -> Result<*mut SearchResult, TantivyGoError> {
     search_sorted(
         query_ptr,
@@ -706,7 +731,7 @@ fn search_sorted(
     docs_limit: usize,
     deadline_seconds: i64,
     deadline_nanos: u32,
-    context: &mut TantivyContext,
+    context: &TantivyContext,
 ) -> Result<*mut SearchResult, TantivyGoError> {
     let capacity = sorted_search_capacity(docs_limit)?;
     let deadline = SearchDeadline::from_unix(deadline_seconds, deadline_nanos)?;
@@ -725,11 +750,11 @@ fn search_sorted_with_deadline(
     docs_limit: usize,
     capacity: usize,
     deadline: &SearchDeadline,
-    context: &mut TantivyContext,
+    context: &TantivyContext,
 ) -> Result<*mut SearchResult, TantivyGoError> {
     let schema = context.index.schema();
     let query = construct_sorted_query(query_ptr, &context.index, deadline)?;
-    let searcher = context.reader()?.searcher();
+    let searcher = context.current_reader().searcher();
     let fields = ffi_slice(fields_ptr, fields_len, "sorted search fields")?;
     let after_values = ffi_slice(after_ptr, after_len, "sorted search after values")?;
     let descriptor = RuntimeSortDescriptor::from_ffi(&schema, &searcher, fields, deadline)?;

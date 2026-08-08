@@ -5,11 +5,11 @@ use std::ptr;
 use tantivy::schema::*;
 use tantivy::{indexer::UserOperation, Opstamp, Term};
 
-use crate::c_util::sorted_search::search_query_sorted;
+use crate::c_util::sorted_search::{search_sorted_reloading, search_sorted_snapshot};
 use crate::c_util::{
     add_and_consume_documents, add_bytes_field, add_date_field, add_f64_field, add_field,
-    add_fields, add_i64_field, add_json_field, add_u64_field, assert_pointer, assert_str,
-    assert_string, box_from, consume_documents, convert_document_as_json,
+    add_fields, add_i64_field, add_json_field, add_u64_field, assert_const_pointer, assert_pointer,
+    assert_str, assert_string, box_from, consume_documents, convert_document_as_json,
     create_context_with_schema, delete_docs, drop_any, get_doc, search, search_fast_field,
     search_fast_field_date, search_fast_field_date_json, search_fast_field_f64,
     search_fast_field_f64_json, search_fast_field_i64, search_fast_field_i64_json,
@@ -628,7 +628,7 @@ pub extern "C" fn context_search_json(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[logcall]
 #[no_mangle]
-pub extern "C" fn context_search_query_sorted(
+pub extern "C" fn context_search_sorted(
     context_ptr: *mut TantivyContext,
     query_ptr: *const c_char,
     sort_fields_ptr: *const SortedSearchField,
@@ -642,7 +642,46 @@ pub extern "C" fn context_search_query_sorted(
 ) -> *mut SearchResult {
     let result = || -> Result<*mut SearchResult, TantivyGoError> {
         let context = assert_pointer(context_ptr)?;
-        search_query_sorted(
+        search_sorted_reloading(
+            query_ptr,
+            sort_fields_ptr,
+            sort_fields_len,
+            after_ptr,
+            after_len,
+            docs_limit,
+            deadline_seconds,
+            deadline_nanos,
+            context,
+        )
+    };
+
+    match result() {
+        Ok(search_result) => search_result,
+        Err(err) => {
+            set_error(&err.to_string(), error_buffer);
+            ptr::null_mut()
+        }
+    }
+}
+
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[logcall]
+#[no_mangle]
+pub extern "C" fn context_search_sorted_snapshot(
+    context_ptr: *const TantivyContext,
+    query_ptr: *const c_char,
+    sort_fields_ptr: *const SortedSearchField,
+    sort_fields_len: usize,
+    after_ptr: *const SortedSearchValue,
+    after_len: usize,
+    docs_limit: usize,
+    deadline_seconds: i64,
+    deadline_nanos: u32,
+    error_buffer: *mut *mut c_char,
+) -> *mut SearchResult {
+    let result = || -> Result<*mut SearchResult, TantivyGoError> {
+        let context = assert_const_pointer(context_ptr)?;
+        search_sorted_snapshot(
             query_ptr,
             sort_fields_ptr,
             sort_fields_len,

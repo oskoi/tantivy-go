@@ -2,7 +2,9 @@ package tantivy_go_test
 
 import (
 	"errors"
+	"fmt"
 	"math"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSearchQuerySortedRejectsInvalidRequests(t *testing.T) {
+func TestSearchSortedRejectsInvalidRequests(t *testing.T) {
 	validSort := []tantivy_go.SortField{{
 		Name:      sortedSearchU64Field,
 		Direction: tantivy_go.SortAscending,
@@ -227,7 +229,7 @@ func TestSearchQuerySortedRejectsInvalidRequests(t *testing.T) {
 	for _, testCase := range testCases {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			result, err := tc.SearchQuerySorted(testCase.request)
+			result, err := tc.SearchSorted(testCase.request)
 			if result != nil {
 				result.Free()
 			}
@@ -239,10 +241,10 @@ func TestSearchQuerySortedRejectsInvalidRequests(t *testing.T) {
 	}
 }
 
-func TestSearchQuerySortedLeavesWhitespaceForNativeParser(t *testing.T) {
+func TestSearchSortedLeavesWhitespaceForNativeParser(t *testing.T) {
 	var tc *tantivy_go.TantivyContext
 
-	result, err := tc.SearchQuerySorted(sortedQueryRequest(" \t "))
+	result, err := tc.SearchSorted(sortedQueryRequest(" \t "))
 	if result != nil {
 		result.Free()
 	}
@@ -250,7 +252,7 @@ func TestSearchQuerySortedLeavesWhitespaceForNativeParser(t *testing.T) {
 	require.ErrorIs(t, err, tantivy_go.ErrClosedContext)
 }
 
-func TestSearchQuerySortedTerms(t *testing.T) {
+func TestSearchSortedTerms(t *testing.T) {
 	tc := newSortedQueryContext(t)
 
 	testCases := []struct {
@@ -303,7 +305,7 @@ func TestSearchQuerySortedTerms(t *testing.T) {
 	}
 }
 
-func TestSearchQuerySortedRanges(t *testing.T) {
+func TestSearchSortedRanges(t *testing.T) {
 	tc := newSortedQueryContext(t)
 
 	testCases := []struct {
@@ -341,7 +343,7 @@ func TestSearchQuerySortedRanges(t *testing.T) {
 	}
 }
 
-func TestSearchQuerySortedComposition(t *testing.T) {
+func TestSearchSortedComposition(t *testing.T) {
 	tc := newSortedQueryContext(t)
 
 	testCases := []struct {
@@ -379,7 +381,7 @@ func TestSearchQuerySortedComposition(t *testing.T) {
 	}
 }
 
-func TestSearchQuerySortedRejectsParserErrors(t *testing.T) {
+func TestSearchSortedRejectsParserErrors(t *testing.T) {
 	tc := newSortedQueryContext(t)
 
 	testCases := []struct {
@@ -398,7 +400,7 @@ func TestSearchQuerySortedRejectsParserErrors(t *testing.T) {
 	for _, testCase := range testCases {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			result, err := tc.SearchQuerySorted(sortedQueryRequest(testCase.query))
+			result, err := tc.SearchSorted(sortedQueryRequest(testCase.query))
 			if result != nil {
 				result.Free()
 			}
@@ -408,7 +410,7 @@ func TestSearchQuerySortedRejectsParserErrors(t *testing.T) {
 	}
 }
 
-func TestSearchQuerySortedAfterTraversesTiesOnce(t *testing.T) {
+func TestSearchSortedAfterTraversesTiesOnce(t *testing.T) {
 	tc := newSortedQueryContext(t)
 
 	wantIDs := []string{"amber", "birch", "cedar", "delta", "ember"}
@@ -441,7 +443,7 @@ func TestSearchQuerySortedAfterTraversesTiesOnce(t *testing.T) {
 			{Name: sortedSearchDocIDField, Direction: tantivy_go.SortAscending},
 		}
 		request.After = after
-		result, err := tc.SearchQuerySorted(request)
+		result, err := tc.SearchSorted(request)
 		require.NoError(t, err)
 
 		pageIDs := sortedSearchResultIDs(t, tc, result)
@@ -471,17 +473,51 @@ func TestSearchQuerySortedAfterTraversesTiesOnce(t *testing.T) {
 	require.Len(t, seenIDs, len(wantIDs))
 }
 
-func TestSearchQuerySortedDeadline(t *testing.T) {
+func TestSearchSortedDeadline(t *testing.T) {
 	tc := newSortedQueryContext(t)
 	request := sortedQueryRequest("*")
 	request.Timeout = time.Nanosecond
 
-	result, err := tc.SearchQuerySorted(request)
+	result, err := tc.SearchSorted(request)
 	if result != nil {
 		result.Free()
 	}
 	require.Nil(t, result)
 	require.ErrorIs(t, err, tantivy_go.ErrSearchTimeout)
+}
+
+func TestSearchSortedSnapshotSupportsConcurrentReads(t *testing.T) {
+	tc := newSortedQueryContext(t)
+	require.NoError(t, tc.ReloadReader())
+
+	const readers = 32
+	errors := make(chan error, readers)
+	var workers sync.WaitGroup
+	workers.Add(readers)
+	for range readers {
+		go func() {
+			defer workers.Done()
+			result, err := tc.SearchSortedSnapshot(sortedQueryRequest("textv:alpha"))
+			if err != nil {
+				errors <- err
+				return
+			}
+			defer result.Free()
+			size, err := result.GetSize()
+			if err != nil {
+				errors <- err
+				return
+			}
+			if size != 1 {
+				errors <- fmt.Errorf("reader snapshot returned %d documents, want 1", size)
+			}
+		}()
+	}
+	workers.Wait()
+	close(errors)
+	for err := range errors {
+		require.NoError(t, err)
+	}
 }
 
 func newSortedQueryContext(t *testing.T) *tantivy_go.TantivyContext {
@@ -551,7 +587,7 @@ func sortedQueryRequest(query string) tantivy_go.SortedQueryRequest {
 func requireSortedQueryIDs(t *testing.T, tc *tantivy_go.TantivyContext, query string, want []string) {
 	t.Helper()
 
-	result, err := tc.SearchQuerySorted(sortedQueryRequest(query))
+	result, err := tc.SearchSorted(sortedQueryRequest(query))
 	require.NoError(t, err)
 	defer result.Free()
 
